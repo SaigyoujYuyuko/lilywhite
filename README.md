@@ -205,9 +205,3 @@ uv build
 ```
 
 `uv build` 会生成源码包和 wheel，发行包里只有 `lilywhite` 框架本体。
-
-## 发布
-
-推送、PR 和 GitHub Release 都会经过 `.github/workflows/publish.yml` 的测试与构建。
-
-发布 Release 时，工作流会进入 `pypi` 环境，通过 Trusted Publishing 上传到 PyPI，不需要在仓库里保存 API Token。Release 标签使用 `v` 加项目版本号，例如 `v0.1.0`。
