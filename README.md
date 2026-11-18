@@ -205,15 +205,20 @@ example/            问候示例
 - `logging`：日志级别、控制台、文件轮转与压缩。
 - `operations`：指标窗口和实时日志 Token。
 
-配置分组直接写 `section()`，不用为每个分组再写一个类。校验条件也可以直接写成 lambda：
+配置分组直接写 `section()`，不用为每个分组再写一个类。字段的范围、长度和正则约束交给 `msgspec.Meta`：
 
 ```python
-from lilywhite.config import Config, section, validate
+from msgspec import Meta
+from lilywhite.config import Config, section, setting
 
-@validate("server.port", lambda value: 0 < value < 65536)
 class AppConfig(Config):
-    server = section(host="127.0.0.1", port=8000)
+    server = section(
+        host=setting("127.0.0.1", meta=Meta(min_length=1)),
+        port=setting(8000, meta=Meta(ge=0, le=65535)),
+    )
 ```
+
+需要跨字段条件时，再在类上叠加 `@validate("字段路径", lambda ...)`。
 
 读取时仍然是 `config.server.port`。需要覆盖时调用 `override()`，会得到一份独立副本：
 

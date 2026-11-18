@@ -3,8 +3,9 @@
 from pathlib import Path
 
 import pytest
+from msgspec import Meta
 
-from lilywhite.config import AppProperties, Config, ConfigLoader, section, validate
+from lilywhite.config import AppProperties, Config, ConfigLoader, section, setting, validate
 
 
 def test_override_returns_independent_config_copy() -> None:
@@ -71,3 +72,33 @@ def test_unknown_yaml_field_is_not_silently_accepted(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="未知配置项"):
         ConfigLoader(config_path).load()
+
+
+def test_meta_range_constraint_applies_to_default_and_override() -> None:
+    """Meta 数值范围同时约束字段默认值和覆盖值。"""
+
+    class RangeConfig(Config):
+        server = section(port=setting(8000, meta=Meta(ge=1, le=65535)))
+
+    assert RangeConfig().override(server={"port": 9527}).server.port == 9527
+    with pytest.raises(ValueError, match="大于或等于"):
+        RangeConfig().override(server={"port": 0})
+
+    with pytest.raises(ValueError, match="小于或等于"):
+        RangeConfig().override(server={"port": 65536})
+
+
+def test_meta_pattern_and_length_constraints() -> None:
+    """Meta 可以声明字符串正则与最小长度。"""
+
+    class TextConfig(Config):
+        logging = section(
+            level=setting("INFO", meta=Meta(pattern=r"^(?:INFO|DEBUG)$", min_length=2)),
+        )
+
+    assert TextConfig().logging.level == "INFO"
+    with pytest.raises(ValueError, match="正则"):
+        TextConfig().override(logging={"level": "INFOO"})
+
+    with pytest.raises(ValueError, match="长度"):
+        TextConfig().override(logging={"level": "I"})

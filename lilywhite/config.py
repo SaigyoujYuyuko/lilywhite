@@ -1,5 +1,6 @@
 """声明式配置分组、装饰器校验与 YAML 加载。"""
 
+import re
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
@@ -8,10 +9,9 @@ from typing import Any, get_args, get_origin
 from urllib.parse import urlsplit
 
 import yaml
+from msgspec import Meta
 
 CONFIG_VERSION = 1
-_LOG_LEVELS = {"TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-_LOG_COMPRESSIONS = {"zip", "gz", "bz2", "xz"}
 Converter = Callable[[Any, Path | None], Any]
 Validator = Callable[[Any], bool]
 
@@ -35,20 +35,57 @@ def _matches_type(value: object, expected: object) -> bool:
     return isinstance(expected, type) and isinstance(value, expected)
 
 
-class ConfigSetting:
-    """保存一个配置值的默认值、类型和可选转换器。"""
+def _validate_meta(value: Any, meta: Meta | None) -> None:
+    """执行 Meta 中的数值、正则和长度约束。"""
+    if meta is None or value is None:
+        return
+    if meta.gt is not None and not value > meta.gt:
+        raise ValueError(f"配置值必须大于 {meta.gt}")
+    if meta.ge is not None and not value >= meta.ge:
+        raise ValueError(f"配置值必须大于或等于 {meta.ge}")
+    if meta.lt is not None and not value < meta.lt:
+        raise ValueError(f"配置值必须小于 {meta.lt}")
+    if meta.le is not None and not value <= meta.le:
+        raise ValueError(f"配置值必须小于或等于 {meta.le}")
+    if meta.multiple_of is not None:
+        if meta.multiple_of == 0:
+            raise ValueError("multiple_of 不能为 0")
+        if value % meta.multiple_of != 0:
+            raise ValueError(f"配置值必须是 {meta.multiple_of} 的倍数")
+    if meta.min_length is not None and len(value) < meta.min_length:
+        raise ValueError(f"配置值长度不能小于 {meta.min_length}")
+    if meta.max_length is not None and len(value) > meta.max_length:
+        raise ValueError(f"配置值长度不能大于 {meta.max_length}")
+    if meta.pattern is not None and re.search(meta.pattern, value) is None:
+        raise ValueError(f"配置值必须匹配正则 {meta.pattern}")
 
-    def __init__(self, default: Any, value_type: object, converter: Converter | None) -> None:
+
+class ConfigSetting:
+    """保存一个配置值的默认值、类型、Meta 约束和可选转换器。"""
+
+    def __init__(
+        self, default: Any, value_type: object, converter: Converter | None, meta: Meta | None = None
+    ) -> None:
         self.default = default
         self.value_type = type(default) if value_type is None else value_type
         self.converter = converter
+        self.meta = meta
         self.value = default
+        _validate_meta(default, meta)
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> ConfigSetting:
+        """复制配置值，共享不可变的 Meta 约束和转换函数。"""
+        cloned = ConfigSetting(deepcopy(self.default, memo), self.value_type, self.converter, self.meta)
+        cloned.value = deepcopy(self.value, memo)
+        memo[id(self)] = cloned
+        return cloned
 
     def convert(self, value: Any, base_dir: Path | None) -> Any:
-        """转换 YAML 值并保留默认类型约束。"""
+        """转换 YAML 值并执行类型与 Meta 约束。"""
         converted = self.converter(value, base_dir) if self.converter is not None else value
         if not _matches_type(converted, self.value_type):
             raise TypeError(f"配置值类型不匹配：期望 {self.value_type}，实际 {type(converted)}")
+        _validate_meta(converted, self.meta)
         return converted
 
 
@@ -87,10 +124,14 @@ class ConfigSection:
 
 
 def setting(
-    default: Any, *, value_type: object | None = None, converter: Converter | None = None
+    default: Any,
+    *,
+    value_type: object | None = None,
+    converter: Converter | None = None,
+    meta: Meta | None = None,
 ) -> ConfigSetting:
-    """声明需要显式类型或转换器的配置值。"""
-    return ConfigSetting(default, value_type if value_type is not None else type(default), converter)
+    """声明需要显式类型、转换器或 Meta 约束的配置值。"""
+    return ConfigSetting(default, value_type if value_type is not None else type(default), converter, meta)
 
 
 def section(**values: Any) -> ConfigSection:
@@ -191,13 +232,6 @@ def _normalize_origins(origins: tuple[str, ...]) -> tuple[str, ...]:
 
 
 @validate("version", lambda value: value == CONFIG_VERSION)
-@validate("server.port", lambda value: 0 <= value <= 65535)
-@validate("operations.metrics_window_size", lambda value: 1 <= value <= 1_000_000)
-@validate("logging.file_rotation_mb", lambda value: 1 <= value <= 10240)
-@validate("logging.file_retention_days", lambda value: 1 <= value <= 3650)
-@validate("logging.level", lambda value: value.upper() in _LOG_LEVELS)
-@validate("logging.third_party_level", lambda value: value.upper() in _LOG_LEVELS)
-@validate("logging.file_compression", lambda value: value is None or value.lower() in _LOG_COMPRESSIONS)
 @validate(
     "operations.log_access_token",
     lambda value: value is None or (len(value) >= 32 and value.isascii()),
@@ -208,23 +242,25 @@ class AppProperties(Config):
     version = CONFIG_VERSION
     server = section(
         host="127.0.0.1",
-        port=8000,
+        port=setting(8000, meta=Meta(ge=0, le=65535)),
         cors=section(
             allow_origins=setting(("null",), value_type=tuple[str, ...], converter=_tuple_value),
         ),
     )
     logging = section(
-        level="INFO",
-        third_party_level="WARNING",
+        level=setting("INFO", meta=Meta(pattern=r"(?i)^(?:TRACE|DEBUG|INFO|WARNING|ERROR|CRITICAL)$")),
+        third_party_level=setting(
+            "WARNING", meta=Meta(pattern=r"(?i)^(?:TRACE|DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
+        ),
         console=True,
         file=setting(None, value_type=Path | None, converter=_path_value),
-        file_rotation_mb=10,
-        file_retention_days=14,
-        file_compression=setting("zip", value_type=str | None),
+        file_rotation_mb=setting(10, meta=Meta(ge=1, le=10240)),
+        file_retention_days=setting(14, meta=Meta(ge=1, le=3650)),
+        file_compression=setting("zip", value_type=str | None, meta=Meta(pattern=r"(?i)^(?:zip|gz|bz2|xz)$")),
     )
     operations = section(
         log_access_token=setting(None, value_type=str | None),
-        metrics_window_size=4096,
+        metrics_window_size=setting(4096, meta=Meta(ge=1, le=1_000_000)),
     )
 
 
