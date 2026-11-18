@@ -3,6 +3,7 @@
 from .app import LilyWhiteApplication, LilywhiteMain, run
 from .config import AppProperties
 from .controller.registry import controller
+from .controller.websocket import websocket_controller
 from .services.registry import service
 from .storage.registry import repository
 from .utils.component import component
@@ -16,4 +17,5 @@ __all__ = [
     "repository",
     "run",
     "service",
+    "websocket_controller",
 ]

@@ -53,3 +53,20 @@ def test_banner_contains_application_metadata_and_server_url() -> None:
     assert "LilyWhite Test v1.2.3" in banner
     assert "http://127.0.0.1:9527" in banner
     assert "Bringing Spring to Python." in banner
+
+
+def test_websocket_controller_receives_and_returns_messages() -> None:
+    """WebSocket Controller 必须随业务包发现并完成真实消息收发。"""
+    application = LilyWhiteApplication(
+        AppProperties(),
+        controller_packages=("lilywhite.controller", "example.controller"),
+        service_package="example.services",
+        storage_package="example.storage",
+        application_name="LilyWhite WebSocket Test",
+    ).create_app()
+
+    with TestClient(application) as client, client.websocket_connect("/ws/echo") as websocket:
+        websocket.send_text("春天来了")
+        response = websocket.receive_text()
+
+    assert response == "LilyWhite 回声：春天来了"

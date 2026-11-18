@@ -92,7 +92,7 @@ Litestar 应用会在首次调用时创建并缓存，HTTP、WebSocket 和 lifes
 装饰器都可以从顶层拿到：
 
 ```python
-from lilywhite import component, controller, repository, service
+from lilywhite import component, controller, repository, service, websocket_controller
 ```
 
 ### Controller
@@ -108,6 +108,20 @@ class GreetingController(Controller):
 根路径直接写在装饰器里。裸写 `@controller`，默认就是 `/`。
 
 Controller 管 HTTP 参数和结果映射，Service 通过 `NamedDependency[具体Service]` 注入。完整例子在 `example/controller/greeting.py`。
+
+### WebSocket Controller
+
+```python
+from litestar.handlers.websocket_handlers import WebsocketListener
+from lilywhite import websocket_controller
+
+@websocket_controller("/ws/echo")
+class EchoWebsocketController(WebsocketListener):
+    async def on_receive(self, data: str) -> str:
+        return f"LilyWhite 回声：{data}"
+```
+
+它和 `@controller` 一样声明路径并随业务包自动发现，只不过处理的是 WebSocket 消息。可以连接 `ws://127.0.0.1:8000/ws/echo`，发一句“春天来了”试试。
 
 ### Service
 

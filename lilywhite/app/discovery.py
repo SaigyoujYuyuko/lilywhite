@@ -5,8 +5,10 @@ from pkgutil import walk_packages
 from types import ModuleType
 
 from litestar import Controller
+from litestar.handlers.websocket_handlers import WebsocketListener
 
 from ..controller.registry import registered_controllers
+from ..controller.websocket import registered_websocket_controllers
 from ..logger import LoggerManager
 
 log = LoggerManager.get_logger("DI")
@@ -80,4 +82,21 @@ def discover_controllers(package_name: str = "lilywhite.controller") -> list[typ
             getattr(controller_type, "path", "/"),
         )
     log.debug("controller discovery complete package={} controllers={}", package_name, len(discovered))
+    return discovered
+
+
+def discover_websocket_controllers(package_name: str) -> list[type[WebsocketListener]]:
+    """从已经导入的业务包中收集显式注册的 WebSocket Controller。"""
+    discovered = sorted(
+        registered_websocket_controllers(package_name),
+        key=lambda controller_type: (controller_type.__module__, controller_type.__name__),
+    )
+    for controller_type in discovered:
+        log.trace(
+            "websocket controller discovered controller={}.{} path={}",
+            controller_type.__module__,
+            controller_type.__qualname__,
+            getattr(controller_type, "path", "/"),
+        )
+    log.debug("websocket discovery complete package={} controllers={}", package_name, len(discovered))
     return discovered
