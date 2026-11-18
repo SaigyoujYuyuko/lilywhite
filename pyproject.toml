@@ -1,0 +1,55 @@
+[project]
+name = "lilywhite"
+version = "0.1.0"
+description = "LilyWhite：基于 Litestar 与 Uvicorn 的 Pythonic 服务端框架"
+requires-python = ">=3.14"
+dependencies = [
+    "litestar>=2.25",
+    "loguru>=0.7",
+    "msgspec>=0.19",
+    "pyyaml>=6.0",
+    "uvicorn>=0.30",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19",
+    "ruff>=0.17",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B", "BLE", "SIM", "C4", "PERF", "RUF", "PL", "RET", "TRY", "ANN", "D100", "D104"]
+ignore = ["PLE1205", "RUF001", "RUF002", "RUF003", "PLR2004", "TRY003", "TRY004"]
+
+[tool.ruff.lint.pylint]
+max-args = 10
+max-branches = 22
+max-returns = 24
+max-statements = 90
+max-positional-args = 10
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.14"
+files = ["lilywhite"]
+strict = true
+disallow_any_explicit = true
+warn_unreachable = true
+warn_no_return = true
+extra_checks = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["litestar.*", "loguru.*", "yaml.*"]
+ignore_missing_imports = true
