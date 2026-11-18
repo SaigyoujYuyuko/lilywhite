@@ -1,0 +1,83 @@
+name: Test and publish
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv and Python 3.14
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run behavior tests
+        run: uv run pytest tests -q
+
+      - name: Check lint rules
+        run: uv run ruff check lilywhite example tests
+
+      - name: Check formatting
+        run: uv run ruff format --check lilywhite example tests
+
+      - name: Check types
+        run: uv run mypy
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Check package metadata
+        run: uvx twine check dist/*
+
+  publish:
+    name: Publish to PyPI
+    if: github.event_name == 'release'
+    needs: test
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv and Python 3.14
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.14"
+
+      - name: Verify release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          import os
+          import tomllib
+          from pathlib import Path
+
+          with Path("pyproject.toml").open("rb") as file:
+              version = tomllib.load(file)["project"]["version"]
+          if os.environ["RELEASE_TAG"] != f"v{version}":
+              raise SystemExit(f"Release tag must be v{version}")
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Publish with Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@release/v1

@@ -13,7 +13,7 @@ from .logger import shutdown_logging
 
 def main(argv: list[str] | None = None) -> None:
     """加载YAML，应用命令行覆盖并启动服务端。"""
-    parser = argparse.ArgumentParser(description="Reusable Litestar server template")
+    parser = argparse.ArgumentParser(description="LilyWhite Framework")
     parser.add_argument("--config", type=Path, default=Path("config.yaml"))
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)

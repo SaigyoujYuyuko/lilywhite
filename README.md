@@ -189,9 +189,18 @@ example/            完整问候业务示例
 ## 开发检查
 
 ```bash
-uv run ruff format --check lilywhite example
-uv run ruff check lilywhite example
+uv sync --locked
+uv run pytest tests -q
+uv run ruff format --check lilywhite example tests
+uv run ruff check lilywhite example tests
 uv run mypy
+uv build
 ```
 
-框架与示例均可直接运行，不要求安装为 Python 包。
+框架与示例均可直接运行；`uv build` 同时生成源码包和 wheel，wheel 只包含 `lilywhite` 框架包。
+
+## 发布
+
+`.github/workflows/publish.yml` 在推送、PR 和 GitHub Release 上执行测试、静态检查与构建。只有发布 Release 才会进入 `pypi` 环境并通过 Trusted Publishing 上传到 PyPI，不需要保存 PyPI API Token。
+
+PyPI Publisher 对应值为：项目 `lilywhite`、Owner `SaigyoujYuyuko`、仓库 `lilywhite`、工作流 `publish.yml`、环境 `pypi`。Release 标签必须为 `v` 加 `pyproject.toml` 中的版本号，例如 `v0.1.0`。

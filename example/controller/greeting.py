@@ -1,10 +1,11 @@
 """问候业务Controller填空示例。"""
 
-from typing import cast
+from typing import Annotated, cast
 
 import msgspec
 from litestar import Controller, Response, get
 from litestar.di import NamedDependency
+from litestar.params import FromPath
 
 from lilywhite import controller
 from lilywhite.controller.result import HttpResult, JsonObject, ok
@@ -19,7 +20,7 @@ class GreetingController(Controller):
     @get("/greetings/{name:str}")
     async def greeting(
         self,
-        name: str,
+        name: Annotated[str, FromPath],
         greeting_service: NamedDependency[GreetingService],
     ) -> Response[HttpResult]:
         """返回指定名字的问候语。"""
