@@ -3,7 +3,6 @@
 import argparse
 from pathlib import Path
 
-import msgspec
 import uvicorn
 from litestar import Litestar
 from litestar.types import Receive, Scope, Send
@@ -109,18 +108,17 @@ def run(main_type: type[object], argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     properties = ConfigLoader(args.config).load()
-    server = msgspec.structs.replace(
-        properties.server,
-        host=properties.server.host if args.host is None else args.host,
-        port=properties.server.port if args.port is None else args.port,
+    properties = properties.override(
+        server={
+            "host": properties.server.host if args.host is None else args.host,
+            "port": properties.server.port if args.port is None else args.port,
+        },
+        logging={
+            "level": properties.logging.level if args.log_level is None else args.log_level,
+            "console": properties.logging.console and not args.no_console,
+            "file": properties.logging.file if args.log_file is None else args.log_file.resolve(),
+        },
     )
-    logging = msgspec.structs.replace(
-        properties.logging,
-        level=properties.logging.level if args.log_level is None else args.log_level,
-        console=properties.logging.console and not args.no_console,
-        file=properties.logging.file if args.log_file is None else args.log_file.resolve(),
-    )
-    properties = msgspec.structs.replace(properties, server=server, logging=logging)
 
     completed_normally = False
     try:

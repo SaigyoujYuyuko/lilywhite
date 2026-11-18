@@ -5,7 +5,6 @@ from collections.abc import Callable, Iterator, Mapping
 from inspect import Parameter, signature
 from typing import Protocol, cast, get_type_hints
 
-import msgspec
 from litestar import Request
 from litestar.datastructures import State
 from litestar.di import Provide
@@ -347,10 +346,6 @@ def create_container(
             component_registration.lifetime,
         )
     container.register_instance(AppProperties, properties)
-    for field in msgspec.structs.fields(properties):
-        value = getattr(properties, field.name)
-        if isinstance(value, msgspec.Struct):
-            container.register_instance(type(value), value)
     for target, instance in (resources or {}).items():
         container.register_instance(target, instance)
     for service_registration in service_registrations.registered_services():

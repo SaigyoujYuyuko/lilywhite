@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, ClassVar
 import loguru
 from loguru import logger
 
-from .config import LoggingProperties
+from .config import ConfigSection
 
 if TYPE_CHECKING:
     from loguru import Record as LoguruRecord
@@ -90,7 +90,7 @@ class LoggerManager:
     _initialization_lock: ClassVar[threading.Lock] = threading.Lock()
 
     @classmethod
-    def initialize(cls, settings: LoggingProperties) -> None:
+    def initialize(cls, settings: ConfigSection) -> None:
         """幂等初始化进程日志，重复调用不会替换现有配置。"""
         with cls._initialization_lock:
             if cls._initialized:
@@ -106,7 +106,7 @@ class LoggerManager:
         return LoggerManager._cache[module_name]
 
 
-def setup_logging(settings: LoggingProperties, intercept_standard_logging: bool = True) -> None:
+def setup_logging(settings: ConfigSection, intercept_standard_logging: bool = True) -> None:
     """配置控制台、文件输出和标准 logging 桥接。"""
     json_logs = os.environ.get("THLW_LOG_JSON", "0").lower() in {"1", "true", "yes"}
     for handler_id in _handlers.values():
@@ -183,8 +183,8 @@ def shutdown_logging() -> None:
 
 
 __all__ = [
+    "ConfigSection",
     "LoggerManager",
-    "LoggingProperties",
     "LoguruHandler",
     "logger",
     "setup_logging",

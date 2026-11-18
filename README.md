@@ -205,7 +205,21 @@ example/            问候示例
 - `logging`：日志级别、控制台、文件轮转与压缩。
 - `operations`：指标窗口和实时日志 Token。
 
-配置分区是不可变的 `msgspec.Struct`。新增分区后，容器可以按具体 Properties 类型注入。
+配置分组直接写 `section()`，不用为每个分组再写一个类。校验条件也可以直接写成 lambda：
+
+```python
+from lilywhite.config import Config, section, validate
+
+@validate("server.port", lambda value: 0 < value < 65536)
+class AppConfig(Config):
+    server = section(host="127.0.0.1", port=8000)
+```
+
+读取时仍然是 `config.server.port`。需要覆盖时调用 `override()`，会得到一份独立副本：
+
+```python
+config = AppConfig().override(server={"port": 9527})
+```
 
 ## 开发
 
