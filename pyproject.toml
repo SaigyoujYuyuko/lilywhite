@@ -42,7 +42,7 @@ line-ending = "lf"
 
 [tool.mypy]
 python_version = "3.14"
-files = ["lilywhite"]
+files = ["lilywhite", "example"]
 strict = true
 disallow_any_explicit = true
 warn_unreachable = true

@@ -24,6 +24,43 @@ from lilywhite import component, controller, repository, service
 
 框架内部仍按职责分层：`controller` 位于 Web 层，其他装饰器不会因方便导入而被错误归入 Web 模块。
 
+## 标志性入口类
+
+每个业务项目用 `@LilywhiteMain` 声明入口类：
+
+```python
+# example/application.py
+from lilywhite import LilywhiteMain
+
+@LilywhiteMain
+class ExampleApplication:
+    pass
+```
+
+框架命令行启动：
+
+```python
+# example/__main__.py
+from lilywhite import run
+from .application import ExampleApplication
+
+if __name__ == "__main__":
+    run(ExampleApplication)
+```
+
+`run()` 根据入口类所在的顶层包自动推导 `controller`、`services`、`storage` 扫描路径，同时加载框架自带的运维模块。未标记的入口类会被拒绝启动。
+
+装饰器还会为入口类注入标准 ASGI `__call__()`，因此同一个入口实例可以直接交给 Uvicorn 或其他 ASGI 服务器：
+
+```python
+import uvicorn
+from example.application import ExampleApplication
+
+uvicorn.run(ExampleApplication(), host="127.0.0.1", port=8000)
+```
+
+入口实例会在首次 ASGI 调用时创建并缓存 Litestar 应用，后续 HTTP、WebSocket 与 lifespan 调用均委托给该应用。
+
 ## 启动示例
 
 准备 Python 3.14+ 和 uv：
@@ -31,7 +68,7 @@ from lilywhite import component, controller, repository, service
 ```bash
 uv sync
 cp -n config.example.yaml config.yaml
-uv run python -m lilywhite --config config.yaml
+uv run python -m example --config config.yaml
 ```
 
 PowerShell 使用 `Copy-Item config.example.yaml config.yaml`。
@@ -50,7 +87,7 @@ curl http://127.0.0.1:8000/metrics
 
 ### Controller
 
-参考 `lilywhite/controller/greeting.py`。使用 `@controller("/api/v1")` 同时注册类型并声明根路径；裸写 `@controller` 默认使用 `/`：
+参考 `example/controller/greeting.py`。使用 `@controller("/api/v1")` 同时注册类型并声明根路径；裸写 `@controller` 默认使用 `/`：
 
 ```python
 @controller("/api/v1")
@@ -75,7 +112,7 @@ Service 表达完整业务用例，通过构造器接收 Repository Interface �
 
 ### Repository 与 Adapter
 
-Interface 放在 `lilywhite/storage/`，具体实现放在后端子包：
+Interface 放在 `example/storage/`，具体实现放在后端子包：
 
 ```python
 @repository(GreetingRepository, backend="memory")
@@ -86,11 +123,11 @@ class MemoryGreetingRepository:
 后端名称由启动参数选择：
 
 ```bash
-uv run python -m lilywhite --backend memory
-uv run python -m lilywhite --backend mysql --backend redis
+uv run python -m example --backend memory
+uv run python -m example --backend mysql --backend redis
 ```
 
-在 `lilywhite/storage/__init__.py` 的 `backend_packages` 元组中声明后端子包。DI 导入全部启用的后端，并按 Repository Interface 查找唯一实现；同一 Interface 在多个启用后端都有实现时会拒绝启动。未启用 Adapter 的依赖不会导致启动失败。
+在 `example/storage/__init__.py` 的 `backend_packages` 元组中声明后端子包。DI 导入全部启用的后端，并按 Repository Interface 查找唯一实现；同一 Interface 在多个启用后端都有实现时会拒绝启动。未启用 Adapter 的依赖不会导致启动失败。
 
 ### 托管组件
 
@@ -108,22 +145,26 @@ Singleton 托管组件会自动正序启动、逆序关闭，并加入 `/healthz
 ## 目录
 
 ```text
-lilywhite/
-  app/             应用入口、DI、发现、HTTP和生命周期装配
-  controller/      Controller、统一结果、SSE和HTTP中间件
-  services/        业务用例、结果模型和@Service
-  storage/         Repository Interface、@repository和后端Adapter
-  domain/          与框架和存储无关的通用类型
-  observability/   有界日志历史和异步订阅
-  utils/           @component、注册表、任务、时钟和随机源
-  config.py        通用配置模型和YAML加载
-  logger.py        Loguru配置和标准日志桥接
-  health.py        生命周期与组件健康
-  metrics.py       有界请求指标
-  __main__.py      命令行启动
-```
+lilywhite/          通用框架，不包含问候业务
+  app/              入口装饰器、ASGI适配、DI、发现和生命周期装配
+  controller/       通用Controller、统一结果、SSE和HTTP中间件
+  services/         通用Service、结果模型和@Service
+  storage/          @repository和后端解析
+  domain/           与框架和存储无关的通用类型
+  observability/    有界日志历史和异步订阅
+  utils/            @component、注册表、任务、时钟和随机源
+  config.py         通用配置模型和YAML加载
+  logger.py         Loguru配置和标准日志桥接
+  health.py         生命周期与组件健康
+  metrics.py        有界请求指标
 
-当前问候模块是完整可运行示例。后续可将示例业务移到独立业务包，由启动器同时扫描框架与业务包。
+example/            完整问候业务示例
+  application.py    @LilywhiteMain 入口类
+  __main__.py       命令行启动
+  controller/       问候Controller
+  services/         问候Service
+  storage/          Repository Interface与内存Adapter
+```
 
 ## 配置
 
@@ -138,9 +179,9 @@ lilywhite/
 ## 开发检查
 
 ```bash
-uv run ruff format --check lilywhite
-uv run ruff check lilywhite
+uv run ruff format --check lilywhite example
+uv run ruff check lilywhite example
 uv run mypy
 ```
 
-框架可直接运行，不要求安装为 Python 包，也不包含具体游戏业务依赖。
+框架与示例均可直接运行，不要求安装为 Python 包。

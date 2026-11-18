@@ -2,9 +2,10 @@
 
 import msgspec
 
+from lilywhite import service
+from lilywhite.services.result import ServiceResult, success
+
 from ..storage.greeting import GreetingRepository
-from .registry import service
-from .result import ServiceResult, success
 
 
 class GreetingResult(msgspec.Struct, frozen=True):

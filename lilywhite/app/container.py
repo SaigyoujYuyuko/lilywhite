@@ -334,6 +334,7 @@ def create_container(
         service_package,
     )
     import_package_modules("lilywhite.utils")
+    import_package_modules("lilywhite.services")
     import_backend_modules(storage_package, enabled_backends)
     import_package_modules(service_package)
 

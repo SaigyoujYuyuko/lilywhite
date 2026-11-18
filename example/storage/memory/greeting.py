@@ -1,7 +1,8 @@
 """问候Repository的内存实现示例。"""
 
+from lilywhite import repository
+
 from ...storage.greeting import GreetingRepository
-from ..registry import repository
 
 
 @repository(GreetingRepository, backend="memory")

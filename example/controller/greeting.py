@@ -6,9 +6,10 @@ import msgspec
 from litestar import Controller, Response, get
 from litestar.di import NamedDependency
 
+from lilywhite import controller
+from lilywhite.controller.result import HttpResult, JsonObject, ok
+
 from ..services.greeting import GreetingService
-from .registry import controller
-from .result import HttpResult, JsonObject, ok
 
 
 @controller("/api/v1")

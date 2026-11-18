@@ -21,7 +21,7 @@ class LilyWhiteApplication:
         *,
         backends: str | tuple[str, ...] = "memory",
         resources: Mapping[type[object], object] | None = None,
-        controller_package: str = "lilywhite.controller",
+        controller_packages: tuple[str, ...] = ("lilywhite.controller",),
         service_package: str = "lilywhite.services",
         storage_package: str = "lilywhite.storage",
     ) -> None:
@@ -42,11 +42,11 @@ class LilyWhiteApplication:
         self.request_metrics = self._runtime.request_metrics
         self.log_stream = self._runtime.log_stream
         self.lifespan = self._runtime.lifespan
-        self._controller_package = controller_package
+        self._controller_packages = controller_packages
 
     def create_app(self) -> Litestar:
         """创建与当前运行时绑定的HTTP应用。"""
-        return create_http_app(self._runtime, self._controller_package, self._application_lifespan)
+        return create_http_app(self._runtime, self._controller_packages, self._application_lifespan)
 
     @asynccontextmanager
     async def _application_lifespan(self, _app: Litestar) -> AsyncGenerator[None]:

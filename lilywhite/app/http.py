@@ -16,12 +16,17 @@ type ApplicationLifespan = Callable[[Litestar], AbstractAsyncContextManager[None
 
 def create_http_app(
     runtime: ApplicationRuntime,
-    controller_package: str,
+    controller_packages: tuple[str, ...],
     lifespan: ApplicationLifespan,
 ) -> Litestar:
     """使用运行时依赖和自动发现的Controller创建HTTP应用。"""
+    route_handlers = [
+        controller
+        for controller_package in controller_packages
+        for controller in discover_controllers(controller_package)
+    ]
     return Litestar(
-        route_handlers=discover_controllers(controller_package),
+        route_handlers=route_handlers,
         dependencies=runtime.container.litestar_dependencies(),
         lifespan=[lifespan],
         middleware=[DefineMiddleware(RequestMetricsMiddleware, metrics=runtime.request_metrics)],
