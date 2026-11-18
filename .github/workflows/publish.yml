@@ -67,6 +67,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          uv run --no-project python - <<'PY'
           import os
           import tomllib
           from pathlib import Path
@@ -75,6 +76,7 @@ jobs:
               version = tomllib.load(file)["project"]["version"]
           if os.environ["RELEASE_TAG"] != f"v{version}":
               raise SystemExit(f"Release tag must be v{version}")
+          PY
 
       - name: Build distributions
         run: uv build
