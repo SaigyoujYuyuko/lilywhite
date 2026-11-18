@@ -34,8 +34,18 @@ from lilywhite import LilywhiteMain
 
 @LilywhiteMain
 class ExampleApplication:
-    pass
+    application_name = "LilyWhite Greeting Example"
+    application_version = "0.1.0"
+    backends = ("memory",)
+
+    async def on_startup(self) -> None:
+        ...
+
+    async def on_shutdown(self) -> None:
+        ...
 ```
+
+`application_name` 和 `application_version` 用于彩色 Banner，`backends` 声明直接作为 ASGI 应用运行时的默认后端。入口类还可实现可选的 `on_startup()` / `on_shutdown()` 钩子，在框架组件启动完成后初始化业务，并在组件关闭前清理业务资源；同步和异步钩子均可使用。
 
 框架命令行启动：
 
@@ -59,7 +69,7 @@ from example.application import ExampleApplication
 uvicorn.run(ExampleApplication(), host="127.0.0.1", port=8000)
 ```
 
-入口实例会在首次 ASGI 调用时创建并缓存 Litestar 应用，后续 HTTP、WebSocket 与 lifespan 调用均委托给该应用。
+入口实例会在首次 ASGI 调用时创建并缓存 Litestar 应用，后续 HTTP、WebSocket 与 lifespan 调用均委托给该应用。外部 ASGI 模式会明确提示监听地址由宿主服务器管理，避免外部端口覆盖后仍展示配置中的旧 URL。
 
 ## 启动示例
 

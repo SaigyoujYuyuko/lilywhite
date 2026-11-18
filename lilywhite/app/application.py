@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from litestar import Litestar
 
+from ..banner import server_url
 from ..config import AppProperties
 from ..logger import LoggerManager
 from .exception_hooks import install_exception_hooks
@@ -24,6 +25,8 @@ class LilyWhiteApplication:
         controller_packages: tuple[str, ...] = ("lilywhite.controller",),
         service_package: str = "lilywhite.services",
         storage_package: str = "lilywhite.storage",
+        application_name: str = "LilyWhite Application",
+        external_server: bool = False,
     ) -> None:
         """初始化日志并自动收集配置、组件和生命周期。"""
         LoggerManager.initialize(properties.logging)
@@ -31,6 +34,12 @@ class LilyWhiteApplication:
         self._log = LoggerManager.get_logger("APP")
         self._log.info("logging initialized")
         self._backend = backends
+        self._application_name = application_name
+        self._url = (
+            "external ASGI server"
+            if external_server
+            else server_url(properties.server.host, properties.server.port)
+        )
         self._runtime = ApplicationRuntime(
             properties,
             backends=backends,
@@ -57,7 +66,12 @@ class LilyWhiteApplication:
             self._log.error("server startup failed type={}", type(error).__name__)
             raise
 
-        self._log.info("server startup complete; service is running backend={}", self._backend)
+        self._log.info(
+            "{}: server is running on: {}; backend: {}",
+            self._application_name,
+            self._url,
+            self._backend,
+        )
         try:
             yield
         finally:

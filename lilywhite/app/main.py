@@ -8,6 +8,7 @@ import uvicorn
 from litestar import Litestar
 from litestar.types import Receive, Scope, Send
 
+from ..banner import print_banner
 from ..config import AppProperties, ConfigLoader
 from ..logger import shutdown_logging
 from .application import LilyWhiteApplication
@@ -21,18 +22,50 @@ def _business_package(main_type: type[object]) -> str:
     return package
 
 
+def _print_entry_banner(
+    main_type: type[object], properties: AppProperties, external_server: bool = False
+) -> None:
+    """使用入口类元数据打印彩色启动 Banner。"""
+    print_banner(
+        str(getattr(main_type, "application_name", "LilyWhite Application")),
+        str(getattr(main_type, "application_version", "0.1.0")),
+        None if external_server else properties.server.host,
+        None if external_server else properties.server.port,
+    )
+
+
 def _create_application(
-    main_type: type[object], properties: AppProperties, backends: str | tuple[str, ...]
+    main_type: type[object],
+    properties: AppProperties,
+    backends: str | tuple[str, ...],
+    entry: object | None = None,
+    external_server: bool = False,
 ) -> Litestar:
-    """按入口类约定装配框架运维模块和业务模块。"""
+    """装配框架和业务，并接入入口类声明的生命周期钩子。"""
+    if getattr(main_type, "__lilywhite_main__", False) is not True:
+        raise TypeError("启动入口类必须使用 @LilywhiteMain 标记")
     package = _business_package(main_type)
-    return LilyWhiteApplication(
+    framework = LilyWhiteApplication(
         properties,
         backends=backends,
         controller_packages=("lilywhite.controller", f"{package}.controller"),
         service_package=f"{package}.services",
         storage_package=f"{package}.storage",
-    ).create_app()
+        application_name=str(getattr(main_type, "application_name", "LilyWhite Application")),
+        external_server=external_server,
+    )
+    entry = main_type() if entry is None else entry
+    for hook_name in ("on_startup", "on_shutdown"):
+        hook = getattr(entry, hook_name, None)
+        if hook is None:
+            continue
+        if not callable(hook):
+            raise TypeError(f"入口类 {hook_name} 必须是可调用方法")
+        if hook_name == "on_startup":
+            framework.lifespan.register("entry_on_startup", "START")(hook)
+        else:
+            framework.lifespan.register("entry_on_shutdown", "STOP")(hook)
+    return framework.create_app()
 
 
 def LilywhiteMain[T](target: type[T]) -> type[T]:
@@ -44,7 +77,11 @@ def LilywhiteMain[T](target: type[T]) -> type[T]:
         application = getattr(self, "__lilywhite_asgi_application__", None)
         if not isinstance(application, Litestar):
             properties = ConfigLoader(Path("config.yaml")).load()
-            application = _create_application(type(self), properties, "memory")
+            _print_entry_banner(type(self), properties, external_server=True)
+            backends = getattr(self, "backends", ("memory",))
+            application = _create_application(
+                type(self), properties, backends, entry=self, external_server=True
+            )
             setattr(self, "__lilywhite_asgi_application__", application)  # noqa: B010
         await application(scope, receive, send)
 
@@ -87,7 +124,9 @@ def run(main_type: type[object], argv: list[str] | None = None) -> None:
 
     completed_normally = False
     try:
-        backends = tuple(args.backend or ["memory"])
+        default_backends = getattr(main_type, "backends", ("memory",))
+        backends = tuple(args.backend) if args.backend else default_backends
+        _print_entry_banner(main_type, properties)
         application = _create_application(main_type, properties, backends)
         uvicorn.run(
             application,
