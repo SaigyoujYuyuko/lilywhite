@@ -47,7 +47,7 @@ from lilywhite import LilywhiteMain
 @LilywhiteMain
 class ExampleApplication:
     application_name = "LilyWhite Greeting Example"
-    application_version = "0.1.0"
+    application_version = "0.2.0"
     backends = ("memory",)
 
     async def on_startup(self) -> None:

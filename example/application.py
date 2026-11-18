@@ -11,7 +11,7 @@ class ExampleApplication:
     """声明示例元数据、默认后端和业务生命周期钩子。"""
 
     application_name = "LilyWhite Greeting Example"
-    application_version = "0.1.0"
+    application_version = "0.2.0"
     backends = ("memory",)
 
     async def on_startup(self) -> None:
