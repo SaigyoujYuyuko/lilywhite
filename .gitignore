@@ -225,3 +225,8 @@ __marimo__/
 # LilyWhite local runtime files
 config.yaml
 logs/
+
+# vscode
+
+.vscode
+
