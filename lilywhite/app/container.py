@@ -10,7 +10,7 @@ from litestar.datastructures import State
 from litestar.di import Provide
 
 from ..config import AppProperties
-from ..lifecycle import ManagedComponent
+from ..lifecycle import ManagedComponent, RequestScopedResource
 from ..logger import LoggerManager
 from ..services import registry as service_registrations
 from ..storage import registry as repository_registrations
@@ -50,22 +50,22 @@ def _provide(instance: object) -> Provide:
 
 
 class DependencyScope:
-    """在一次 HTTP 请求内共享 Scoped 实例并创建 Transient 实例。"""
+    """在一次请求或后台任务内共享 Scoped 实例并创建 Transient 实例。"""
 
     def __init__(self, container: DependencyContainer) -> None:
-        """绑定应用容器并创建请求级实例表。"""
+        """绑定应用容器并创建当前作用域的实例表。"""
         self._container = container
         self._instances: dict[type[object], object] = {}
         self._resolving: list[type[object]] = []
 
-    def resolve(self, target: type[object]) -> object:
-        """按目标生命周期解析当前请求内的实例。"""
+    def resolve[T](self, target: type[T]) -> T:
+        """按目标生命周期解析当前作用域内的实例。"""
         lifetime = self._container._prepare(target)
         if lifetime is LifetimeType.SINGLETON:
-            return self._container._resolve_singleton(target)
+            return cast(T, self._container._resolve_singleton(target))
         if lifetime is LifetimeType.SCOPED and target in self._instances:
             log.trace("scoped cache hit target={}", _type_name(target))
-            return self._instances[target]
+            return cast(T, self._instances[target])
         if target in self._resolving:
             cycle = " -> ".join(_type_name(item) for item in (*self._resolving, target))
             raise DependencyInjectionException(f"检测到循环依赖：{cycle}")
@@ -78,7 +78,15 @@ class DependencyScope:
         if lifetime is LifetimeType.SCOPED:
             self._instances[target] = instance
         log.debug("dependency constructed target={} lifetime={}", _type_name(target), lifetime.value)
-        return instance
+        return cast(T, instance)
+
+    async def close(self) -> None:
+        """按构造逆序关闭当前作用域的资源，并允许重复调用。"""
+        instances = list(self._instances.values())
+        self._instances.clear()
+        for instance in reversed(instances):
+            if isinstance(instance, RequestScopedResource):
+                await instance.close()
 
 
 class DependencyContainer:
@@ -98,6 +106,15 @@ class DependencyContainer:
         self._implementations: dict[type[object], type[object]] = {}
         self._services: set[type[object]] = set()
         self._resolving: list[type[object]] = []
+
+    def create_scope(self) -> DependencyScope:
+        """为后台任务创建显式、由调用方关闭的依赖作用域。"""
+        return DependencyScope(self)
+
+    @property
+    def request_scope_key(self) -> str:
+        """返回当前容器在 ASGI 请求作用域中的键。"""
+        return f"_lilywhite_dependency_scope_{id(self)}"
 
     def register_instance[T](self, target: type[T], instance: T) -> None:
         """把已有资源注册为应用级单例。"""
@@ -269,7 +286,7 @@ class DependencyContainer:
 
     def _request_scope(self, request: Request[object, object, State]) -> DependencyScope:
         """取得或创建当前请求共享的依赖作用域。"""
-        key = f"_reuse_dependency_scope_{id(self)}"
+        key = self.request_scope_key
         scope_values = cast(dict[str, object], request.scope)
         scope = scope_values.get(key)
         if isinstance(scope, DependencyScope):

@@ -1,15 +1,18 @@
-"""Litestar 路由、依赖和中间件装配。"""
+"""Litestar 路由、依赖、中间件与可选 HTTP 扩展装配。"""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import AbstractAsyncContextManager
 
 from litestar import Litestar
 from litestar.config.cors import CORSConfig
 from litestar.middleware import DefineMiddleware
+from litestar.openapi.config import OpenAPIConfig
+from litestar.types import ExceptionHandler
 
 from ..controller.middleware.metrics import RequestMetricsHooks, RequestMetricsMiddleware
 from .discovery import discover_business_controllers, discover_controllers, discover_websocket_controllers
 from .runtime import ApplicationRuntime
+from .scope import RequestScopeMiddleware
 
 type ApplicationLifespan = Callable[[Litestar], AbstractAsyncContextManager[None]]
 
@@ -18,8 +21,11 @@ def create_http_app(
     runtime: ApplicationRuntime,
     controller_packages: tuple[str, ...],
     lifespan: ApplicationLifespan,
+    *,
+    exception_handlers: Mapping[int | type[Exception], ExceptionHandler[Exception]] | None = None,
+    openapi_config: OpenAPIConfig | None = None,
 ) -> Litestar:
-    """使用运行时依赖和自动发现的 HTTP/WebSocket Controller 创建应用。"""
+    """使用运行时依赖、自动发现路由和项目级 HTTP 配置创建应用。"""
     route_handlers = [
         controller
         for controller_package in controller_packages
@@ -39,8 +45,13 @@ def create_http_app(
         route_handlers=route_handlers,
         dependencies=runtime.container.litestar_dependencies(),
         lifespan=[lifespan],
-        middleware=[DefineMiddleware(RequestMetricsMiddleware, metrics=runtime.request_metrics)],
+        middleware=[
+            DefineMiddleware(RequestMetricsMiddleware, metrics=runtime.request_metrics),
+            DefineMiddleware(RequestScopeMiddleware, container=runtime.container),
+        ],
         before_request=RequestMetricsHooks(runtime.request_metrics).before_request,
+        exception_handlers=dict(exception_handlers or {}),
+        openapi_config=openapi_config,
         cors_config=(
             CORSConfig(allow_origins=list(runtime.cors_allow_origins)) if runtime.cors_allow_origins else None
         ),

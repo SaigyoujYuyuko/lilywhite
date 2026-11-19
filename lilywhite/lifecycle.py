@@ -16,4 +16,13 @@ class ManagedComponent(Protocol):
         ...
 
 
-__all__ = ["ManagedComponent"]
+@runtime_checkable
+class RequestScopedResource(Protocol):
+    """需要在当前显式作用域或完整 HTTP 请求结束后释放的资源。"""
+
+    async def close(self) -> None:
+        """释放当前作用域持有的资源。"""
+        ...
+
+
+__all__ = ["ManagedComponent", "RequestScopedResource"]

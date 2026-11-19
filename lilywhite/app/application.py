@@ -4,6 +4,8 @@ from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 
 from litestar import Litestar
+from litestar.openapi.config import OpenAPIConfig
+from litestar.types import ExceptionHandler
 
 from ..banner import server_url
 from ..config import AppProperties
@@ -26,8 +28,10 @@ class LilyWhiteApplication:
         business_package: str | None = None,
         application_name: str = "LilyWhite Application",
         external_server: bool = False,
+        exception_handlers: Mapping[int | type[Exception], ExceptionHandler[Exception]] | None = None,
+        openapi_config: OpenAPIConfig | None = None,
     ) -> None:
-        """初始化日志并自动收集配置、组件和生命周期。"""
+        """初始化日志、依赖容器和项目级 HTTP 扩展。"""
         LoggerManager.initialize(properties.logging)
         install_exception_hooks()
         self._log = LoggerManager.get_logger("APP")
@@ -45,15 +49,24 @@ class LilyWhiteApplication:
             resources=resources,
             business_package=business_package,
         )
+        self.container = self._runtime.container
         self.health_center = self._runtime.health_center
         self.request_metrics = self._runtime.request_metrics
         self.log_stream = self._runtime.log_stream
         self.lifespan = self._runtime.lifespan
         self._controller_packages = controller_packages
+        self._exception_handlers = exception_handlers
+        self._openapi_config = openapi_config
 
     def create_app(self) -> Litestar:
         """创建与当前运行时绑定的HTTP应用。"""
-        return create_http_app(self._runtime, self._controller_packages, self._application_lifespan)
+        return create_http_app(
+            self._runtime,
+            self._controller_packages,
+            self._application_lifespan,
+            exception_handlers=self._exception_handlers,
+            openapi_config=self._openapi_config,
+        )
 
     @asynccontextmanager
     async def _application_lifespan(self, _app: Litestar) -> AsyncGenerator[None]:
