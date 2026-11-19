@@ -3,6 +3,7 @@
 import pytest
 from litestar.testing import TestClient
 
+import lilywhite.app.main as main_module
 from lilywhite import LilyWhiteApplication, LilywhiteMain, run
 from lilywhite.banner import render_banner
 from lilywhite.config import AppProperties
@@ -70,3 +71,24 @@ def test_websocket_controller_receives_and_returns_messages() -> None:
         response = websocket.receive_text()
 
     assert response == "LilyWhite 回声：春天来了"
+
+
+def test_custom_entry_banner_replaces_default(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """入口类 banner() 的字符串应取代框架默认 Banner。"""
+
+    @LilywhiteMain
+    class CustomBannerApplication:
+        def banner(self) -> str:
+            return "CUSTOM SPRING BANNER"
+
+    monkeypatch.setattr(main_module, "_create_application", lambda *args, **kwargs: object())
+    monkeypatch.setattr(main_module.uvicorn, "run", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main_module, "shutdown_logging", lambda: None)
+
+    run(CustomBannerApplication, ["--config", "config.example.yaml"])
+
+    captured = capsys.readouterr()
+    assert "CUSTOM SPRING BANNER" in captured.out
+    assert "Bringing Spring to Python." not in captured.out

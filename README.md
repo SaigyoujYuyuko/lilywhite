@@ -50,6 +50,9 @@ class ExampleApplication:
     application_version = "0.2.0"
     backends = ("memory",)
 
+    def banner(self) -> str:
+        return "春が来た！这是我自己写的 Banner"
+
     async def on_startup(self) -> None:
         ...
 
@@ -57,7 +60,9 @@ class ExampleApplication:
         ...
 ```
 
-`application_name` 和 `application_version` 会出现在 Banner 上，`backends` 是默认存储后端。
+`application_name` 和 `application_version` 会出现在默认 Banner 上，`backends` 是默认存储后端。
+
+想用自己的字符画，就写一个返回字符串的 `banner()`。框架会改用它，不再打印默认 Banner；返回内容里也可以带 ANSI 颜色。
 
 想加点自己的启动逻辑，就写 `on_startup()`；需要收拾资源，就写 `on_shutdown()`。同步、异步都可以，框架会把它们接进生命周期。
 

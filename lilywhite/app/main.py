@@ -22,9 +22,21 @@ def _business_package(main_type: type[object]) -> str:
 
 
 def _print_entry_banner(
-    main_type: type[object], properties: AppProperties, external_server: bool = False
+    main_type: type[object],
+    properties: AppProperties,
+    external_server: bool = False,
+    entry: object | None = None,
 ) -> None:
-    """使用入口类元数据打印彩色启动 Banner。"""
+    """优先打印入口类自定义 Banner，否则使用框架默认样式。"""
+    custom_banner = getattr(entry, "banner", None)
+    if custom_banner is not None:
+        if not callable(custom_banner):
+            raise TypeError("入口类 banner 必须是可调用方法")
+        content = custom_banner()
+        if not isinstance(content, str):
+            raise TypeError("入口类 banner() 必须返回字符串")
+        print(content)
+        return
     print_banner(
         str(getattr(main_type, "application_name", "LilyWhite Application")),
         str(getattr(main_type, "application_version", "0.1.0")),
@@ -76,7 +88,7 @@ def LilywhiteMain[T](target: type[T]) -> type[T]:
         application = getattr(self, "__lilywhite_asgi_application__", None)
         if not isinstance(application, Litestar):
             properties = ConfigLoader(Path("config.yaml")).load()
-            _print_entry_banner(type(self), properties, external_server=True)
+            _print_entry_banner(type(self), properties, external_server=True, entry=self)
             backends = getattr(self, "backends", ("memory",))
             application = _create_application(
                 type(self), properties, backends, entry=self, external_server=True
@@ -124,8 +136,9 @@ def run(main_type: type[object], argv: list[str] | None = None) -> None:
     try:
         default_backends = getattr(main_type, "backends", ("memory",))
         backends = tuple(args.backend) if args.backend else default_backends
-        _print_entry_banner(main_type, properties)
-        application = _create_application(main_type, properties, backends)
+        entry = main_type()
+        _print_entry_banner(main_type, properties, entry=entry)
+        application = _create_application(main_type, properties, backends, entry=entry)
         uvicorn.run(
             application,
             host=properties.server.host,
