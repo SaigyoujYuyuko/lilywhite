@@ -5,7 +5,7 @@ from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
 from types import UnionType
-from typing import Any, get_args, get_origin
+from typing import Any, ClassVar, cast, get_args, get_origin
 from urllib.parse import urlsplit
 
 import yaml
@@ -96,18 +96,25 @@ class ConfigSection:
         self._settings: dict[str, ConfigSetting] = {}
         for name, value in values.items():
             if isinstance(value, ConfigSection):
-                setattr(self, name, value)
+                self.__dict__[name] = value
             else:
                 self._settings[name] = (
                     value if isinstance(value, ConfigSetting) else ConfigSetting(value, type(value), None)
                 )
 
-    def __getattr__(self, name: str) -> Any:
-        """读取分组值，未知名称直接报错。"""
+    def _read(self, name: str) -> Any:
+        """从值设置或嵌套分组中读取一个字段。"""
         settings = self.__dict__.get("_settings", {})
         if name in settings:
             return settings[name].value
+        nested = self.__dict__.get(name)
+        if isinstance(nested, ConfigSection):
+            return nested
         raise AttributeError(f"未知配置项：{name}")
+
+    def __getattr__(self, name: str) -> Any:
+        """把未找到的实例属性转交给配置字段表。"""
+        return self._read(name)
 
     def _update(self, values: Mapping[str, Any], base_dir: Path | None) -> None:
         """递归更新已知配置值，不静默接受拼错的字段。"""
@@ -143,9 +150,10 @@ def validate[T](path: str, predicate: Validator) -> Callable[[T], T]:
     """把路径和 lambda 条件注册为配置类校验器。"""
 
     def decorate(target: T) -> T:
-        validators = list(getattr(target, "__config_validators__", ()))
+        config_type = cast(type[Config], target)
+        validators = list(config_type.__config_validators__)
         validators.append((path, predicate))
-        setattr(target, "__config_validators__", validators)  # noqa: B010
+        config_type.__config_validators__ = validators
         return target
 
     return decorate
@@ -154,17 +162,19 @@ def validate[T](path: str, predicate: Validator) -> Callable[[T], T]:
 class Config:
     """通过分组和装饰器校验构成一份完整应用配置。"""
 
+    __config_validators__: ClassVar[list[tuple[str, Validator]]] = []
+
     def __init__(self) -> None:
         for name, value in vars(type(self)).items():
             if name.startswith("_") or callable(value):
                 continue
-            setattr(self, name, deepcopy(value))
+            self.__dict__[name] = deepcopy(value)
         self._validate()
 
     def _apply(self, changes: Mapping[str, Any], base_dir: Path | None = None) -> None:
         """按 YAML 映射覆盖默认值并保留未知字段检查。"""
         for name, value in changes.items():
-            current = getattr(self, name, None)
+            current = self.__dict__.get(name)
             if isinstance(current, ConfigSection):
                 if not isinstance(value, Mapping):
                     raise TypeError(f"配置分组 {name} 必须使用映射")
@@ -173,7 +183,7 @@ class Config:
                 expected = type(current)
                 if not _matches_type(value, expected):
                     raise TypeError(f"配置项 {name} 类型不匹配")
-                setattr(self, name, value)
+                self.__dict__[name] = value
             else:
                 raise ValueError(f"未知配置项：{name}")
         self._validate()
@@ -184,13 +194,22 @@ class Config:
         cloned._apply(changes)
         return cloned
 
+    def _read_path(self, path: str) -> Any:
+        """按点分路径读取嵌套配置值。"""
+        value: Any = self
+        for part in path.split("."):
+            if isinstance(value, Config):
+                value = value.__dict__[part]
+            elif isinstance(value, ConfigSection):
+                value = value._read(part)
+            else:
+                raise ValueError(f"配置路径无效：{path}")
+        return value
+
     def _validate(self) -> None:
         """执行类上按声明顺序注册的全部校验器。"""
-        for path, predicate in getattr(type(self), "__config_validators__", ()):
-            value: Any = self
-            for part in path.split("."):
-                value = getattr(value, part)
-            if not predicate(value):
+        for path, predicate in type(self).__config_validators__:
+            if not predicate(self._read_path(path)):
                 raise ValueError(f"配置项 {path} 校验失败")
 
 

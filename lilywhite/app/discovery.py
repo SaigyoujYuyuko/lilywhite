@@ -215,7 +215,7 @@ def _sorted_controllers(package_name: str) -> list[type[Controller]]:
             "controller discovered controller={}.{} path={}",
             controller_type.__module__,
             controller_type.__qualname__,
-            getattr(controller_type, "path", "/"),
+            controller_type.path,  # type: ignore[misc]
         )
     log.debug("controller discovery complete package={} controllers={}", package_name, len(discovered))
     return discovered
@@ -247,7 +247,7 @@ def discover_websocket_controllers(package_name: str) -> list[type[WebsocketList
             "websocket controller discovered controller={}.{} path={}",
             controller_type.__module__,
             controller_type.__qualname__,
-            getattr(controller_type, "path", "/"),
+            controller_type.path,
         )
     log.debug("websocket discovery complete package={} controllers={}", package_name, len(discovered))
     return discovered

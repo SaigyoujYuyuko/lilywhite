@@ -8,7 +8,8 @@ import os
 import sys
 import threading
 from collections.abc import Callable
-from typing import TYPE_CHECKING, ClassVar
+from types import TracebackType
+from typing import TYPE_CHECKING, ClassVar, cast
 
 import loguru
 from loguru import logger
@@ -82,28 +83,138 @@ class LoguruHandler(std_logging.Handler):
         ).log(level, "{}", record.getMessage())
 
 
-class LoggerManager:
-    """管理进程级日志初始化和带模块标签的 Logger。"""
+type LogTarget = loguru.Logger | std_logging.Logger
+type LoggerFactory = Callable[[str], LogTarget]
+type ExceptionInfo = tuple[type[BaseException], BaseException | None, TracebackType | None]
+type StandardExceptionInfo = tuple[type[BaseException], BaseException, TracebackType | None]
 
-    _cache: ClassVar[dict[str, loguru.Logger]] = {}
+
+class ModuleLogger:
+    """把固定的花括号日志风格适配到 Loguru 或标准 logging。"""
+
+    def __init__(self, module_name: str, exception: ExceptionInfo | None = None) -> None:
+        """保存模块标签和可选异常，实际 Logger 在写入时解析。"""
+        self._module_name = module_name
+        self._exception = exception
+
+    def opt(self, *, exception: ExceptionInfo | None = None) -> ModuleLogger:
+        """保留 Loguru opt(exception=...) 写法，并适配标准 logging。"""
+        return ModuleLogger(self._module_name, exception)
+
+    def trace(self, message: str, *args: object, **kwargs: object) -> None:
+        """记录 TRACE；标准 logging 使用 DEBUG。"""
+        self._write("trace", message, args, kwargs)
+
+    def debug(self, message: str, *args: object, **kwargs: object) -> None:
+        """记录 DEBUG。"""
+        self._write("debug", message, args, kwargs)
+
+    def info(self, message: str, *args: object, **kwargs: object) -> None:
+        """记录 INFO。"""
+        self._write("info", message, args, kwargs)
+
+    def warning(self, message: str, *args: object, **kwargs: object) -> None:
+        """记录 WARNING。"""
+        self._write("warning", message, args, kwargs)
+
+    def error(self, message: str, *args: object, **kwargs: object) -> None:
+        """记录 ERROR。"""
+        self._write("error", message, args, kwargs)
+
+    def critical(self, message: str, *args: object, **kwargs: object) -> None:
+        """记录 CRITICAL。"""
+        self._write("critical", message, args, kwargs)
+
+    def exception(self, message: str, *args: object, **kwargs: object) -> None:
+        """记录当前异常。"""
+        self._write("exception", message, args, kwargs)
+
+    def _write(
+        self,
+        level: str,
+        message: str,
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> None:
+        """完成花括号插值，并显式调用目标级别的日志方法。"""
+        target = LoggerManager._get_target(self._module_name)
+        rendered = message.format(*args, **kwargs) if args or kwargs else message
+        if isinstance(target, std_logging.Logger):
+            exc_info = cast(StandardExceptionInfo | None, self._exception)
+            match level:
+                case "trace" | "debug":
+                    target.debug(rendered, exc_info=exc_info, stacklevel=3)
+                case "info":
+                    target.info(rendered, exc_info=exc_info, stacklevel=3)
+                case "warning":
+                    target.warning(rendered, exc_info=exc_info, stacklevel=3)
+                case "error":
+                    target.error(rendered, exc_info=exc_info, stacklevel=3)
+                case "critical":
+                    target.critical(rendered, exc_info=exc_info, stacklevel=3)
+                case _:
+                    target.exception(rendered, exc_info=exc_info, stacklevel=3)
+            return
+
+        configured = target.opt(depth=2, exception=self._exception)
+        match level:
+            case "trace":
+                configured.trace(rendered)
+            case "debug":
+                configured.debug(rendered)
+            case "info":
+                configured.info(rendered)
+            case "warning":
+                configured.warning(rendered)
+            case "error":
+                configured.error(rendered)
+            case "critical":
+                configured.critical(rendered)
+            case _:
+                configured.exception(rendered)
+
+
+def _validate_log_target(target: object) -> None:
+    """拒绝无法明确适配的日志对象。"""
+    if not isinstance(target, (type(logger), std_logging.Logger)):
+        raise TypeError("自定义 Logger 必须是 logging.Logger、loguru.Logger 或对应工厂")
+
+
+class LoggerManager:
+    """管理进程级日志初始化、自定义 Logger 和模块标签。"""
+
+    _cache: ClassVar[dict[str, LogTarget]] = {}
+    _logger_factory: ClassVar[LoggerFactory | None] = None
     _initialized: ClassVar[bool] = False
     _initialization_lock: ClassVar[threading.Lock] = threading.Lock()
 
     @classmethod
     def initialize(cls, settings: ConfigSection) -> None:
-        """幂等初始化进程日志，重复调用不会替换现有配置。"""
+        """幂等初始化进程日志，自定义 Logger 由其调用方负责配置。"""
         with cls._initialization_lock:
             if cls._initialized:
                 return
-            setup_logging(settings)
+            if cls._logger_factory is None:
+                setup_logging(settings)
             cls._initialized = True
 
+    @classmethod
+    def _get_target(cls, module_name: str) -> LogTarget:
+        """取得当前模块的 Loguru Logger 或自定义 Logger。"""
+        if module_name not in cls._cache:
+            target: LogTarget
+            if cls._logger_factory is None:
+                target = logger.bind(module=module_name)
+            else:
+                target = cls._logger_factory(module_name)
+                _validate_log_target(target)
+            cls._cache[module_name] = target
+        return cls._cache[module_name]
+
     @staticmethod
-    def get_logger(module_name: str) -> loguru.Logger:
-        """返回带固定模块标签的缓存 Logger。"""
-        if module_name not in LoggerManager._cache:
-            LoggerManager._cache[module_name] = logger.bind(module=module_name)
-        return LoggerManager._cache[module_name]
+    def get_logger(module_name: str) -> ModuleLogger:
+        """返回保持模块标签且能响应后续 Logger 替换的适配器。"""
+        return ModuleLogger(module_name)
 
 
 def setup_logging(settings: ConfigSection, intercept_standard_logging: bool = True) -> None:
@@ -182,11 +293,38 @@ def shutdown_logging() -> None:
     LoggerManager._initialized = False
 
 
+def override_logger(custom_logger: LogTarget | LoggerFactory | None) -> None:
+    """替换进程内 LilyWhite Logger；传 None 恢复 Loguru。"""
+    factory: LoggerFactory | None
+    if custom_logger is None:
+        factory = None
+    elif isinstance(custom_logger, (type(logger), std_logging.Logger)):
+        instance = custom_logger
+
+        def use_instance(_module_name: str) -> LogTarget:
+            return instance
+
+        factory = use_instance
+    else:
+        logger_factory = cast(LoggerFactory, custom_logger)
+        _validate_log_target(logger_factory("APP"))
+        factory = logger_factory
+
+    shutdown_logging()
+    with LoggerManager._initialization_lock:
+        LoggerManager._logger_factory = factory
+        LoggerManager._cache.clear()
+
+
 __all__ = [
     "ConfigSection",
+    "LogTarget",
+    "LoggerFactory",
     "LoggerManager",
     "LoguruHandler",
+    "ModuleLogger",
     "logger",
+    "override_logger",
     "setup_logging",
     "shutdown_logging",
     "third_party_log_filter",

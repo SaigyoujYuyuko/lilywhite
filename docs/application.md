@@ -98,6 +98,47 @@ class MyApplication:
 
 `banner()` 会完整替换默认 Banner。它和 `banner_message()` 同时存在时，以 `banner()` 为准。两个方法都必须返回字符串。
 
+## 自定义日志器
+
+入口类可以声明 `override_logger()`，在框架初始化日志之前换成自己的 Logger。接口接受标准 `logging.Logger`、`loguru.Logger`，或者返回这两种类型的模块工厂。下面直接返回标准 `logging.Logger` 实例：
+
+```python
+import logging
+from lilywhite import LilywhiteMain
+
+application_logger = logging.getLogger("my_app")
+
+@LilywhiteMain
+class MyApplication:
+    def override_logger(self) -> logging.Logger:
+        return application_logger
+```
+
+也可以返回按模块创建 Logger 的工厂。下面的写法会用 `APP`、`DI` 等模块标签调用 `logging.getLogger()`：
+
+```python
+@LilywhiteMain
+class MyApplication:
+    def override_logger(self):
+        return logging.getLogger
+```
+
+手动组合应用或不使用入口类时，可以调用顶层接口：
+
+```python
+import logging
+from lilywhite import override_logger
+
+override_logger(logging.getLogger)
+
+# 需要恢复 LilyWhite 默认 Loguru 配置时：
+override_logger(None)
+```
+
+框架的 `{}` 日志占位符会先完成插值，再交给自定义 Logger，因此标准 `logging` 不需要改用 `%s` 写法。标准 Logger 没有 `trace()` 时会自动写入 DEBUG；未捕获异常堆栈也会通过 `exc_info` 传过去。
+
+自定义 Logger 的 Handler、级别和输出目的地由调用方配置。接管后，LilyWhite 不再安装默认 Loguru 控制台、文件输出和标准 logging 拦截。内置 `/logs/stream` 仍基于 Loguru，自定义 Logger 的记录不会自动进入这条 SSE 流。
+
 ## 入口生命周期
 
 `on_startup()` 在框架托管组件启动后执行，适合业务预热、缓存加载或启动检查。

@@ -28,7 +28,7 @@ def websocket_controller[T](target_or_path: type[T] | str = "/", /) -> type[T] |
         """校验监听器类型，设置路径并记录到独立注册表。"""
         if not issubclass(target, WebsocketListener):
             raise TypeError("@websocket_controller 只能用于 Litestar WebsocketListener 子类")
-        setattr(target, "path", path)  # noqa: B010
+        target.path = path
         websocket_controller_registry.register(
             "websocket_controller", f"{target.__module__}.{target.__qualname__}", target
         )

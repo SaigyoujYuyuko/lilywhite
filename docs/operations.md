@@ -74,6 +74,8 @@ curl -N \
 
 这个 Token 与业务用户认证无关，只保护运维日志流。不要把真实 Token 写进仓库或公开示例。
 
+这条日志流读取的是 Loguru 记录。通过 `override_logger()` 接管框架日志后，自定义 Logger 的记录不会自动出现在这里；需要流式日志时，可以在自己的 Handler 中另行接入。
+
 ## 统一 HTTP 响应
 
 `lilywhite.controller.result` 提供常用响应构造器：

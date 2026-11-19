@@ -1,13 +1,16 @@
 """LilyWhite 公开接口、示例应用与启动 Banner 的行为测试。"""
 
+import logging
+
 import pytest
 from litestar.testing import TestClient
 
 import lilywhite.app.main as main_module
 from example.application import _time_greeting
-from lilywhite import LilyWhiteApplication, LilywhiteMain, run
+from lilywhite import LilyWhiteApplication, LilywhiteMain, override_logger, run
 from lilywhite.banner import render_banner
 from lilywhite.config import AppProperties
+from lilywhite.logger import LoggerManager
 
 
 def test_greeting_uses_complete_dependency_injection_chain() -> None:
@@ -149,3 +152,73 @@ def test_entry_shutdown_hook_runs_after_real_lifespan() -> None:
         pass
 
     assert events == ["startup", "shutdown"]
+
+
+class _LogCollector(logging.Handler):
+    """在内存中保留标准 logging 记录。"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+def test_entry_override_logger_accepts_standard_logger_instance() -> None:
+    """入口声明的标准 Logger 应接管真实启动、DI 和关闭日志。"""
+    custom_logger = logging.getLogger("tests.custom_entry")
+    custom_logger.setLevel(logging.DEBUG)
+    custom_logger.propagate = False
+    collector = _LogCollector()
+    custom_logger.addHandler(collector)
+
+    @LilywhiteMain
+    class CustomLoggerApplication:
+        def override_logger(self) -> logging.Logger:
+            return custom_logger
+
+    CustomLoggerApplication.__module__ = "example.application"
+    entry = CustomLoggerApplication()
+    try:
+        application = main_module._create_application(
+            CustomLoggerApplication,
+            AppProperties(),
+            ("memory",),
+            entry=entry,
+        )
+        with TestClient(application):
+            pass
+    finally:
+        override_logger(None)
+        custom_logger.removeHandler(collector)
+
+    messages = [record.getMessage() for record in collector.records]
+    assert "logging initialized" in messages
+    assert any(
+        message.startswith("dependency container scan start backends=('memory',)") for message in messages
+    )
+    assert "server shutdown complete" in messages
+
+
+def test_override_logger_factory_updates_existing_reference_and_exception() -> None:
+    """工厂应按模块取名，旧适配器也应切换并保留异常信息。"""
+    custom_logger = logging.getLogger("custom.factory")
+    custom_logger.setLevel(logging.DEBUG)
+    custom_logger.propagate = False
+    collector = _LogCollector()
+    custom_logger.addHandler(collector)
+    adapted = LoggerManager.get_logger("custom.factory")
+    error = ValueError("bad spring")
+
+    try:
+        override_logger(logging.getLogger)
+        adapted.info("hello {}", "world")
+        adapted.opt(exception=(ValueError, error, None)).critical("unhandled exception")
+    finally:
+        override_logger(None)
+        custom_logger.removeHandler(collector)
+
+    assert [record.name for record in collector.records] == ["custom.factory", "custom.factory"]
+    assert collector.records[0].getMessage() == "hello world"
+    assert collector.records[1].exc_info == (ValueError, error, None)

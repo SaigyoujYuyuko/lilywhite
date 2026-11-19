@@ -26,7 +26,7 @@ def controller[T](target_or_path: type[T] | str = "/", /) -> type[T] | Callable[
         """校验Controller子类，设置Litestar路径并记录类型。"""
         if not issubclass(target, Controller):
             raise TypeError("@controller 只能用于 Litestar Controller 子类")
-        setattr(target, "path", path)  # noqa: B010
+        target.path = path  # type: ignore[misc]
         key = f"{target.__module__}.{target.__qualname__}"
         controller_registry[key] = target
         return target
