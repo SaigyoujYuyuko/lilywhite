@@ -77,7 +77,9 @@ if __name__ == "__main__":
     run(ExampleApplication)
 ```
 
-入口类在哪个顶层包，`run()` 就扫描哪个包里的 `controller`、`services` 和 `storage`。
+入口类在哪个顶层包，`run()` 就用 AST 扫描哪个包。目录叫 `controller`、`http`、`services`、`logic`、`storage` 还是 `store` 都可以，认的是装饰器，不是文件夹名字。
+
+扫描阶段只解析源码，选出带 `@controller`、`@websocket_controller`、`@service`、`@repository` 或 `@component` 的模块，再精确导入这些模块完成注册。没贴装饰器的普通模块不会为了“碰运气”而全部导入。装饰器起个别名也认，比如 `from lilywhite import service as s` 后的 `@s`。
 
 ### 换个 ASGI 服务器也行
 
@@ -141,7 +143,7 @@ class GreetingService:
 
 ### Repository 与 Adapter
 
-接口放在业务包的 `storage/`，实现放进对应后端子包：
+接口和实现可以放在任意业务目录，示例里叫 `store/`：
 
 ```python
 @repository(GreetingRepository, backend="memory")
@@ -149,11 +151,7 @@ class MemoryGreetingRepository:
     ...
 ```
 
-在 `example/storage/__init__.py` 里声明有哪些后端：
-
-```python
-backend_packages = ("memory",)
-```
+`backend` 直接声明这个 Adapter 属于哪种后端。静态扫描会跳过未启用的 Adapter 模块，不需要再维护 `backend_packages` 或让目录名跟后端名保持一致。这里要写字符串字面量，方便启动前确定导入边界；不同后端继续分模块放，可选依赖就不会被误加载。
 
 启动时选一个，或者多选：
 
@@ -199,7 +197,7 @@ example/            问候示例
   __main__.py       命令行启动
   controller/       问候 Controller
   services/         问候 Service
-  storage/          Repository 接口与内存 Adapter
+  store/            Repository 接口与内存 Adapter（目录名可自由更换）
 ```
 
 ## 配置

@@ -20,10 +20,11 @@ class ApplicationRuntime:
         *,
         backends: str | tuple[str, ...] = "memory",
         resources: Mapping[type[object], object] | None = None,
-        service_package: str = "lilywhite.services",
-        storage_package: str = "lilywhite.storage",
+        business_package: str | None = None,
     ) -> None:
-        """创建运行时并自动注册全部托管Singleton组件。"""
+        """创建运行时并自动注册当前业务包与框架组件。"""
+        self.business_package = business_package
+        self.backends = backends
         self.health_center = HealthCenter()
         self.request_metrics = RequestMetrics(properties.operations.metrics_window_size)
         self.cors_allow_origins = properties.server.cors.allow_origins
@@ -35,8 +36,7 @@ class ApplicationRuntime:
         self.container = create_container(
             properties=properties,
             backends=backends,
-            service_package=service_package,
-            storage_package=storage_package,
+            business_package=business_package,
             resources=runtime_resources,
         )
         self.lifespan = LifespanManager()

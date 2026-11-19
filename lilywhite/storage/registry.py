@@ -37,12 +37,22 @@ def repository[T](
     return register
 
 
-def registered_repositories(interface: type[object], backend: str) -> list[RepositoryRegistration]:
-    """返回 Interface 在指定后端下注册的全部实现及生命周期。"""
+def registered_repositories(
+    interface: type[object],
+    backend: str,
+    *,
+    package_names: tuple[str, ...] | None = None,
+) -> list[RepositoryRegistration]:
+    """返回指定包内 Interface 在所选后端下的全部实现及生命周期。"""
     return [
         RepositoryRegistration(implementation=implementation, lifetime=lifetime)
         for lifetime in LifetimeType
         for implementation in repository_registry.by_namespace(_namespace(interface, backend, lifetime))
+        if package_names is None
+        or any(
+            implementation.__module__ == package or implementation.__module__.startswith(f"{package}.")
+            for package in package_names
+        )
     ]
 
 

@@ -59,9 +59,8 @@ def _create_application(
     framework = LilyWhiteApplication(
         properties,
         backends=backends,
-        controller_packages=("lilywhite.controller", f"{package}.controller"),
-        service_package=f"{package}.services",
-        storage_package=f"{package}.storage",
+        controller_packages=("lilywhite.controller",),
+        business_package=package,
         application_name=str(getattr(main_type, "application_name", "LilyWhite Application")),
         external_server=external_server,
     )

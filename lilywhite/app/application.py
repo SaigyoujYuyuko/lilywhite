@@ -23,8 +23,7 @@ class LilyWhiteApplication:
         backends: str | tuple[str, ...] = "memory",
         resources: Mapping[type[object], object] | None = None,
         controller_packages: tuple[str, ...] = ("lilywhite.controller",),
-        service_package: str = "lilywhite.services",
-        storage_package: str = "lilywhite.storage",
+        business_package: str | None = None,
         application_name: str = "LilyWhite Application",
         external_server: bool = False,
     ) -> None:
@@ -44,8 +43,7 @@ class LilyWhiteApplication:
             properties,
             backends=backends,
             resources=resources,
-            service_package=service_package,
-            storage_package=storage_package,
+            business_package=business_package,
         )
         self.health_center = self._runtime.health_center
         self.request_metrics = self._runtime.request_metrics

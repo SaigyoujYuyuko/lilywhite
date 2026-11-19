@@ -62,9 +62,15 @@ def component[T](
     return register if target is None else register(target)
 
 
-def registered_components() -> Iterator[ComponentRegistration]:
-    """迭代全部组件及其公开Interface。"""
-    yield from component_registry.values()
+def registered_components(package_names: tuple[str, ...] | None = None) -> Iterator[ComponentRegistration]:
+    """迭代指定包内的组件及其公开 Interface。"""
+    for registration in component_registry.values():
+        module = registration.implementation.__module__
+        if package_names is not None and not any(
+            module == package or module.startswith(f"{package}.") for package in package_names
+        ):
+            continue
+        yield registration
 
 
 __all__ = ["ComponentRegistration", "component", "component_registry", "registered_components"]

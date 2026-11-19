@@ -5,7 +5,7 @@ import msgspec
 from lilywhite import service
 from lilywhite.services.result import ServiceResult, success
 
-from ..storage.greeting import GreetingRepository
+from ..store.greeting import GreetingRepository
 
 
 class GreetingResult(msgspec.Struct, frozen=True):

@@ -2,7 +2,7 @@
 
 from lilywhite import repository
 
-from ...storage.greeting import GreetingRepository
+from ...store.greeting import GreetingRepository
 
 
 @repository(GreetingRepository, backend="memory")

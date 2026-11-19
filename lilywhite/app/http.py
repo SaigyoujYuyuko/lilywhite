@@ -8,7 +8,7 @@ from litestar.config.cors import CORSConfig
 from litestar.middleware import DefineMiddleware
 
 from ..controller.middleware.metrics import RequestMetricsHooks, RequestMetricsMiddleware
-from .discovery import discover_controllers, discover_websocket_controllers
+from .discovery import discover_business_controllers, discover_controllers, discover_websocket_controllers
 from .runtime import ApplicationRuntime
 
 type ApplicationLifespan = Callable[[Litestar], AbstractAsyncContextManager[None]]
@@ -28,6 +28,13 @@ def create_http_app(
             *discover_websocket_controllers(controller_package),
         )
     ]
+    if runtime.business_package is not None:
+        route_handlers.extend(
+            (
+                *discover_business_controllers(runtime.business_package, runtime.backends),
+                *discover_websocket_controllers(runtime.business_package),
+            )
+        )
     return Litestar(
         route_handlers=route_handlers,
         dependencies=runtime.container.litestar_dependencies(),

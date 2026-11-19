@@ -13,9 +13,7 @@ def test_greeting_uses_complete_dependency_injection_chain() -> None:
     """示例请求必须经过 Controller、Service 和内存 Repository。"""
     application = LilyWhiteApplication(
         AppProperties(),
-        controller_packages=("lilywhite.controller", "example.controller"),
-        service_package="example.services",
-        storage_package="example.storage",
+        business_package="example",
         application_name="LilyWhite Test",
     ).create_app()
 
@@ -60,9 +58,7 @@ def test_websocket_controller_receives_and_returns_messages() -> None:
     """WebSocket Controller 必须随业务包发现并完成真实消息收发。"""
     application = LilyWhiteApplication(
         AppProperties(),
-        controller_packages=("lilywhite.controller", "example.controller"),
-        service_package="example.services",
-        storage_package="example.storage",
+        business_package="example",
         application_name="LilyWhite WebSocket Test",
     ).create_app()
 

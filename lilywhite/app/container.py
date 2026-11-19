@@ -16,7 +16,7 @@ from ..services import registry as service_registrations
 from ..storage import registry as repository_registrations
 from ..utils import component as component_registrations
 from ..utils.registry import LifetimeType
-from .discovery import BackendSelection, import_backend_modules, import_package_modules, normalize_backends
+from .discovery import BackendSelection, import_decorated_modules, import_package_modules, normalize_backends
 
 log = LoggerManager.get_logger("DI")
 
@@ -84,9 +84,15 @@ class DependencyScope:
 class DependencyContainer:
     """按构造器类型提示和生命周期创建依赖并生成 Litestar 依赖表。"""
 
-    def __init__(self, backends: BackendSelection) -> None:
-        """保存启用后端集合并初始化单例、类型和生命周期注册表。"""
+    def __init__(
+        self,
+        backends: BackendSelection,
+        *,
+        package_names: tuple[str, ...] | None = None,
+    ) -> None:
+        """保存启用后端、包边界并初始化类型和生命周期注册表。"""
         self._backends = normalize_backends(backends)
+        self._package_names = package_names
         self._instances: dict[type[object], object] = {}
         self._lifetimes: dict[type[object], LifetimeType] = {}
         self._implementations: dict[type[object], type[object]] = {}
@@ -182,7 +188,11 @@ class DependencyContainer:
         candidates = [
             (backend, registration)
             for backend in self._backends
-            for registration in repository_registrations.registered_repositories(target, backend)
+            for registration in repository_registrations.registered_repositories(
+                target,
+                backend,
+                package_names=self._package_names,
+            )
         ]
         if not candidates:
             raise DependencyInjectionException(f"依赖未注册：{_type_name(target)}")
@@ -320,26 +330,25 @@ def create_container(
     *,
     properties: AppProperties | None = None,
     backends: BackendSelection = "memory",
-    service_package: str = "lilywhite.services",
-    storage_package: str = "lilywhite.storage",
+    business_package: str | None = None,
     resources: Mapping[type[object], object] | None = None,
 ) -> DependencyContainer:
-    """自动收集配置分区、组件、Repository和Service并构造依赖图。"""
+    """自动收集框架与业务装饰器，构造限定包边界的依赖图。"""
     enabled_backends = normalize_backends(backends)
+    package_names = ("lilywhite",) if business_package is None else ("lilywhite", business_package)
     log.debug(
-        "dependency container scan start backends={} storage_package={} service_package={}",
+        "dependency container scan start backends={} business_package={}",
         enabled_backends,
-        storage_package,
-        service_package,
+        business_package,
     )
     import_package_modules("lilywhite.utils")
     import_package_modules("lilywhite.services")
-    import_backend_modules(storage_package, enabled_backends)
-    import_package_modules(service_package)
+    if business_package is not None:
+        import_decorated_modules(business_package, enabled_backends)
 
     properties = properties or AppProperties()
-    container = DependencyContainer(enabled_backends)
-    for component_registration in component_registrations.registered_components():
+    container = DependencyContainer(enabled_backends, package_names=package_names)
+    for component_registration in component_registrations.registered_components(package_names):
         container.register_component(
             component_registration.interface,
             component_registration.implementation,
@@ -348,7 +357,7 @@ def create_container(
     container.register_instance(AppProperties, properties)
     for target, instance in (resources or {}).items():
         container.register_instance(target, instance)
-    for service_registration in service_registrations.registered_services():
+    for service_registration in service_registrations.registered_services(package_names):
         container.register_service(service_registration.service_type, service_registration.lifetime)
     container.build()
     return container

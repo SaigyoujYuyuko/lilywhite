@@ -49,10 +49,15 @@ def service[T](
     return register if target is None else register(target)
 
 
-def registered_services() -> Iterator[ServiceRegistration]:
-    """按生命周期迭代所有已标记的 Service 类型。"""
+def registered_services(package_names: tuple[str, ...] | None = None) -> Iterator[ServiceRegistration]:
+    """按生命周期迭代指定包内已标记的 Service 类型。"""
     for lifetime in LifetimeType:
         for service_type in service_registry.by_namespace(_namespace(lifetime)):
+            if package_names is not None and not any(
+                service_type.__module__ == package or service_type.__module__.startswith(f"{package}.")
+                for package in package_names
+            ):
+                continue
             yield ServiceRegistration(service_type=service_type, lifetime=lifetime)
 
 
