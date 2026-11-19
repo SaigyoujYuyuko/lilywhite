@@ -22,6 +22,7 @@ class LifespanManager:
         self._start_hooks: Registry[LifespanHook] = Registry()
         self._stop_hooks: Registry[LifespanHook] = Registry()
         self._start_order: list[str] = []
+        self._stop_order: list[str] = []
         self._started: list[str] = []
         self._running = False
 
@@ -44,6 +45,8 @@ class LifespanManager:
             hooks.register(hook_type, hook_name, func)
             if hook_type == "START":
                 self._start_order.append(hook_name)
+            else:
+                self._stop_order.append(hook_name)
             return func
 
         return decorator
@@ -62,6 +65,7 @@ class LifespanManager:
             with contextlib.suppress(Exception):
                 await self.stop()
             raise
+        self._started.extend(name for name in self._stop_order if name not in self._start_order)
 
     async def stop(self) -> None:
         """逆序关闭组件，记录全部关闭错误后继续清理。"""

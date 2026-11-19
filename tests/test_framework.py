@@ -88,3 +88,30 @@ def test_custom_entry_banner_replaces_default(
     captured = capsys.readouterr()
     assert "CUSTOM SPRING BANNER" in captured.out
     assert "Bringing Spring to Python." not in captured.out
+
+
+def test_entry_shutdown_hook_runs_after_real_lifespan() -> None:
+    """入口的 STOP-only hook 必须随 Litestar lifespan 正常执行。"""
+    events: list[str] = []
+
+    @LilywhiteMain
+    class LifecycleApplication:
+        async def on_startup(self) -> None:
+            events.append("startup")
+
+        async def on_shutdown(self) -> None:
+            events.append("shutdown")
+
+    LifecycleApplication.__module__ = "example.application"
+    entry = LifecycleApplication()
+    application = main_module._create_application(
+        LifecycleApplication,
+        AppProperties(),
+        ("memory",),
+        entry=entry,
+    )
+
+    with TestClient(application):
+        pass
+
+    assert events == ["startup", "shutdown"]
