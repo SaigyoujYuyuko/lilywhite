@@ -9,7 +9,7 @@
 
 没有代理、AOP 和字节码魔法。Lily White 是报春妖精，这个框架也把 Spring 的开发体验带进 Python，再涂上一点幻想乡的颜色。
 
-## 最简用法
+## 快速开始
 
 需要 Python 3.14+ 和 uv：
 
@@ -48,7 +48,7 @@ uv run python -m my_app
 
 打开 `http://127.0.0.1:8000/healthz`，应用已经跑起来了。
 
-## 继续写
+## 文档
 
 - [快速上手：第一个接口与仓库示例](docs/getting-started.md)
 - [入口、Banner、生命周期与 ASGI](docs/application.md)
@@ -57,4 +57,4 @@ uv run python -m my_app
 - [健康检查、指标、日志流与响应格式](docs/operations.md)
 - [文档导航与仓库结构](docs/index.md)
 
-仓库里的 `example/` 是可以直接运行的完整问候应用。
+仓库里的 `example/` 是可以直接运行的完整问候应用，可以试着运行
