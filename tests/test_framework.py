@@ -4,6 +4,7 @@ import pytest
 from litestar.testing import TestClient
 
 import lilywhite.app.main as main_module
+from example.application import _time_greeting
 from lilywhite import LilyWhiteApplication, LilywhiteMain, run
 from lilywhite.banner import render_banner
 from lilywhite.config import AppProperties
@@ -52,6 +53,39 @@ def test_banner_contains_application_metadata_and_server_url() -> None:
     assert "LilyWhite Test v1.2.3" in banner
     assert "http://127.0.0.1:9527" in banner
     assert "Bringing Spring to Python." in banner
+
+
+@pytest.mark.parametrize(
+    ("hour", "expected"),
+    [
+        (8, "Good Morning, have a nice day in your app!"),
+        (12, "sun is on mid. have a nice launch!"),
+        (15, "Good Afternoon！"),
+        (20, "Good evening"),
+        (1, "Good midnight！you sleep so lately，keep your body！"),
+    ],
+)
+def test_example_banner_greeting_matches_local_time(hour: int, expected: str) -> None:
+    """示例彩蛋应覆盖早上、中午、下午、晚上和跨午夜。"""
+    assert _time_greeting(hour) == expected
+
+
+def test_default_banner_includes_optional_entry_message(capsys: pytest.CaptureFixture[str]) -> None:
+    """附加消息应保留默认字符画、版本和启动 URL。"""
+
+    class MessageApplication:
+        application_name = "Message Test"
+
+        def banner_message(self) -> str:
+            return "HAVE A NICE DAY"
+
+    main_module._print_entry_banner(MessageApplication, AppProperties(), entry=MessageApplication())
+
+    captured = capsys.readouterr()
+    assert "Bringing Spring to Python." in captured.out
+    assert "Message Test v0.1.0" in captured.out
+    assert "http://127.0.0.1:8000" in captured.out
+    assert "HAVE A NICE DAY" in captured.out
 
 
 def test_websocket_controller_receives_and_returns_messages() -> None:

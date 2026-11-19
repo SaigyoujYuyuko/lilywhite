@@ -27,7 +27,7 @@ def _print_entry_banner(
     external_server: bool = False,
     entry: object | None = None,
 ) -> None:
-    """优先打印入口类自定义 Banner，否则使用框架默认样式。"""
+    """优先打印入口类自定义 Banner，否则使用默认样式和可选附加消息。"""
     custom_banner = getattr(entry, "banner", None)
     if custom_banner is not None:
         if not callable(custom_banner):
@@ -43,6 +43,15 @@ def _print_entry_banner(
         None if external_server else properties.server.host,
         None if external_server else properties.server.port,
     )
+    banner_message = getattr(entry, "banner_message", None)
+    if banner_message is None:
+        return
+    if not callable(banner_message):
+        raise TypeError("入口类 banner_message 必须是可调用方法")
+    message = banner_message()
+    if not isinstance(message, str):
+        raise TypeError("入口类 banner_message() 必须返回字符串")
+    print(message)
 
 
 def _create_application(
