@@ -8,12 +8,15 @@ from .logger import override_logger
 from .services.registry import service
 from .storage.registry import repository
 from .utils.component import component
+from .utils.configuration import bean, configuration
 
 __all__ = [
     "AppProperties",
     "LilyWhiteApplication",
     "LilywhiteMain",
+    "bean",
     "component",
+    "configuration",
     "controller",
     "override_logger",
     "repository",

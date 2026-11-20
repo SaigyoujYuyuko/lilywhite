@@ -2,9 +2,10 @@
 
 import re
 from collections.abc import Callable, Iterator, Mapping
-from inspect import Parameter, signature
+from inspect import Parameter, iscoroutinefunction, signature
 from typing import Protocol, cast, get_type_hints
 
+import msgspec
 from litestar import Request
 from litestar.datastructures import State
 from litestar.di import Provide
@@ -15,6 +16,7 @@ from ..logger import LoggerManager
 from ..services import registry as service_registrations
 from ..storage import registry as repository_registrations
 from ..utils import component as component_registrations
+from ..utils import configuration as configuration_registrations
 from ..utils.registry import LifetimeType
 from .discovery import BackendSelection, import_decorated_modules, import_package_modules, normalize_backends
 
@@ -27,6 +29,14 @@ class _Constructor(Protocol):
     def __call__(self, **kwargs: object) -> object:
         """构造一个对象实例。"""
         ...
+
+
+class _BeanRegistration(msgspec.Struct, frozen=True):
+    """一个配置类实例及其同步工厂方法。"""
+
+    configuration: object
+    factory: Callable[..., object]
+    dependencies: list[tuple[str, type[object]]]
 
 
 class DependencyInjectionException(RuntimeError):
@@ -105,6 +115,7 @@ class DependencyContainer:
         self._lifetimes: dict[type[object], LifetimeType] = {}
         self._implementations: dict[type[object], type[object]] = {}
         self._services: set[type[object]] = set()
+        self._beans: dict[type[object], _BeanRegistration] = {}
         self._resolving: list[type[object]] = []
 
     def create_scope(self) -> DependencyScope:
@@ -129,6 +140,8 @@ class DependencyContainer:
         lifetime: LifetimeType = LifetimeType.SINGLETON,
     ) -> None:
         """注册可暴露给 Controller 的 Service 及其生命周期。"""
+        if service_type in self._beans:
+            raise DependencyInjectionException(f"Service 与 Bean 重复注册：{_type_name(service_type)}")
         log.debug("service registered service={} lifetime={}", _type_name(service_type), lifetime.value)
         self._services.add(service_type)
         self._lifetimes[service_type] = lifetime
@@ -141,6 +154,8 @@ class DependencyContainer:
         lifetime: LifetimeType,
     ) -> None:
         """注册可注入但不直接暴露给Controller的基础设施组件。"""
+        if interface in self._beans:
+            raise DependencyInjectionException(f"Component 与 Bean 重复注册：{_type_name(interface)}")
         log.debug(
             "component registered interface={} implementation={} lifetime={}",
             _type_name(interface),
@@ -149,6 +164,26 @@ class DependencyContainer:
         )
         self._lifetimes[interface] = lifetime
         self._implementations[interface] = implementation
+
+    def register_bean(self, configuration: object, factory: Callable[..., object]) -> None:
+        """注册配置类中的同步工厂方法及其返回类型。"""
+        if iscoroutinefunction(factory):
+            raise DependencyInjectionException(f"Bean 工厂必须是同步方法：{factory.__qualname__}")
+        return_type = get_type_hints(factory).get("return")
+        if not isinstance(return_type, type):
+            raise DependencyInjectionException(f"Bean 工厂缺少具体返回类型：{factory.__qualname__}")
+        if return_type in self._lifetimes or return_type in self._beans:
+            raise DependencyInjectionException(f"Bean 重复注册：{_type_name(return_type)}")
+        dependencies = self._bean_dependencies(factory)
+        self._beans[return_type] = _BeanRegistration(configuration, factory, dependencies)
+        self._lifetimes[return_type] = LifetimeType.SINGLETON
+        self._implementations[return_type] = return_type
+        log.debug(
+            "bean registered type={} factory={}.{} lifetime=singleton",
+            _type_name(return_type),
+            factory.__module__,
+            factory.__qualname__,
+        )
 
     def managed_components(self) -> Iterator[ManagedComponent]:
         """返回已构造且实现生命周期协议的Singleton，按实现去重。"""
@@ -166,7 +201,13 @@ class DependencyContainer:
         for service_type in sorted(self._services, key=_type_name):
             if self._lifetimes[service_type] is LifetimeType.SINGLETON:
                 self._resolve_singleton(service_type)
-        log.debug("dependency graph build complete services={}", len(self._services))
+        for bean_type in sorted(self._beans, key=_type_name):
+            self._validate(bean_type, ())
+        for bean_type in sorted(self._beans, key=_type_name):
+            self._resolve_singleton(bean_type)
+        log.debug(
+            "dependency graph build complete services={} beans={}", len(self._services), len(self._beans)
+        )
 
     def resolve[T](self, target: type[T]) -> T:
         """在请求作用域外解析 Singleton，拒绝无请求上下文的 Scoped 和 Transient。"""
@@ -236,8 +277,7 @@ class DependencyContainer:
             raise DependencyInjectionException(f"检测到循环依赖：{cycle}")
 
         lifetime = self._prepare(target)
-        implementation = self._implementations[target]
-        for name, dependency in self._constructor_dependencies(implementation):
+        for name, dependency in self._dependencies(target):
             dependency_lifetime = self._prepare(dependency)
             if lifetime is LifetimeType.SINGLETON and dependency_lifetime is not LifetimeType.SINGLETON:
                 raise DependencyInjectionException(
@@ -300,7 +340,7 @@ class DependencyContainer:
         """使用单例解析器或请求作用域递归构造目标。"""
         implementation = self._implementations[target]
         arguments: dict[str, object] = {}
-        for name, dependency in self._constructor_dependencies(implementation):
+        for name, dependency in self._dependencies(target):
             log.trace(
                 "constructor inject owner={} parameter={} dependency={}",
                 _type_name(implementation),
@@ -317,8 +357,36 @@ class DependencyContainer:
             else:
                 arguments[name] = scope.resolve(dependency)
 
+        bean = self._beans.get(target)
+        if bean is not None:
+            return bean.factory(bean.configuration, **arguments)
         factory = cast(_Constructor, implementation)
         return factory(**arguments)
+
+    def _dependencies(self, target: type[object]) -> list[tuple[str, type[object]]]:
+        """读取类构造器或 Bean 工厂方法需要的依赖。"""
+        bean = self._beans.get(target)
+        if bean is not None:
+            return bean.dependencies
+        return self._constructor_dependencies(self._implementations[target])
+
+    @staticmethod
+    def _bean_dependencies(factory: Callable[..., object]) -> list[tuple[str, type[object]]]:
+        """读取工厂方法参数，self 由所属配置类实例提供。"""
+        hints = get_type_hints(factory)
+        dependencies: list[tuple[str, type[object]]] = []
+        for name, parameter in signature(factory).parameters.items():
+            if name == "self":
+                continue
+            if parameter.kind not in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY):
+                raise DependencyInjectionException(f"Bean 工厂参数不受支持：{factory.__qualname__}.{name}")
+            dependency = hints.get(name)
+            if not isinstance(dependency, type):
+                raise DependencyInjectionException(
+                    f"Bean 工厂参数缺少具体类型：{factory.__qualname__}.{name}"
+                )
+            dependencies.append((name, dependency))
+        return dependencies
 
     @staticmethod
     def _constructor_dependencies(implementation: type[object]) -> list[tuple[str, type[object]]]:
@@ -371,6 +439,15 @@ def create_container(
             component_registration.implementation,
             component_registration.lifetime,
         )
+    for configuration_type in configuration_registrations.registered_configurations(package_names):
+        try:
+            configuration = configuration_type()
+        except TypeError as error:
+            raise DependencyInjectionException(
+                f"配置类构造器必须无参数：{_type_name(configuration_type)}"
+            ) from error
+        for factory in configuration_registrations.registered_bean_methods(configuration_type):
+            container.register_bean(configuration, factory)
     container.register_instance(AppProperties, properties)
     for target, instance in (resources or {}).items():
         container.register_instance(target, instance)

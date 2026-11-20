@@ -1,0 +1,157 @@
+"""可复用的 AST 装饰器扫描器，不导入被扫描的业务模块。"""
+
+import ast
+from collections.abc import Mapping
+from dataclasses import dataclass
+from importlib import import_module
+from pathlib import Path
+
+type DecoratorSources = Mapping[str, frozenset[str]]
+
+
+class StaticScanError(ValueError):
+    """源码无法按静态规则解析。"""
+
+
+@dataclass(frozen=True)
+class DecoratedClass:
+    """一个模块级类及其命中的装饰器。"""
+
+    module: str
+    class_name: str
+    decorator: str
+    node: ast.expr
+    source: Path
+
+
+class ASTScanner:
+    """按调用方提供的装饰器及其合法导入来源扫描 Python 包。"""
+
+    def __init__(self, sources: DecoratorSources) -> None:
+        self._sources = sources
+
+    def scan_package(self, package_name: str) -> tuple[DecoratedClass, ...]:
+        """递归解析包内源码，返回所有匹配的模块级类。"""
+        package = import_module(package_name)
+        spec = package.__spec__
+        if spec is None or spec.submodule_search_locations is None:
+            raise TypeError(f"扫描目标不是包：{package_name}")
+
+        discovered: list[DecoratedClass] = []
+        for location in spec.submodule_search_locations:
+            root = Path(location)
+            for source in sorted(root.rglob("*.py")):
+                module_name = self._module_name(package_name, root, source)
+                discovered.extend(self.scan_file(source, module_name))
+        return tuple(
+            sorted(
+                discovered,
+                key=lambda item: (item.module, item.class_name, item.decorator),
+            )
+        )
+
+    def scan_file(self, source: Path, module_name: str) -> tuple[DecoratedClass, ...]:
+        """扫描单个文件，不执行其中的类和装饰器。"""
+        try:
+            tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+        except SyntaxError as error:
+            raise StaticScanError(f"无法解析业务源码 {source}:{error.lineno}：{error.msg}") from error
+
+        decorators, modules = self._import_aliases(tree)
+        discovered: list[DecoratedClass] = []
+        for class_node in tree.body:
+            if not isinstance(class_node, ast.ClassDef):
+                continue
+            for decorator_node in class_node.decorator_list:
+                name = self._decorator_name(decorator_node, decorators, modules)
+                if name is not None:
+                    discovered.append(
+                        DecoratedClass(module_name, class_node.name, name, decorator_node, source)
+                    )
+        return tuple(discovered)
+
+    def _import_aliases(self, tree: ast.Module) -> tuple[dict[str, str], dict[str, str]]:
+        """收集模块级导入中的装饰器别名和模块别名。"""
+        decorators: dict[str, str] = {}
+        modules: dict[str, str] = {}
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    for prefix in self._module_prefixes():
+                        if alias.name == prefix or alias.name.startswith(f"{prefix}."):
+                            local_name = alias.asname or alias.name.partition(".")[0]
+                            modules[local_name] = prefix if alias.asname is None else alias.name
+                            break
+            elif isinstance(node, ast.ImportFrom) and node.module is not None:
+                for alias in node.names:
+                    if alias.name in self._sources and node.module in self._sources[alias.name]:
+                        decorators[alias.asname or alias.name] = alias.name
+        return decorators, modules
+
+    def _module_prefixes(self) -> set[str]:
+        """从装饰器来源推导需要跟踪的顶层模块。"""
+        return {
+            source.partition(".")[0] for source_group in self._sources.values() for source in source_group
+        }
+
+    def _decorator_name(
+        self,
+        decorator: ast.expr,
+        decorators: dict[str, str],
+        modules: dict[str, str],
+    ) -> str | None:
+        """识别直接导入和模块属性两种装饰器写法。"""
+        expression = decorator.func if isinstance(decorator, ast.Call) else decorator
+        if isinstance(expression, ast.Name):
+            return decorators.get(expression.id)
+
+        dotted = self._dotted_name(expression)
+        if dotted is None:
+            return None
+        root, separator, attributes = dotted.partition(".")
+        module_name = modules.get(root)
+        if module_name is None:
+            return None
+        qualified = f"{module_name}{separator}{attributes}"
+        owner, _, name = qualified.rpartition(".")
+        if name in self._sources and owner in self._sources[name]:
+            return name
+        return None
+
+    @staticmethod
+    def _dotted_name(node: ast.AST) -> str | None:
+        """把 Name 和 Attribute 表达式还原为点分名称。"""
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            owner = ASTScanner._dotted_name(node.value)
+            return None if owner is None else f"{owner}.{node.attr}"
+        return None
+
+    @staticmethod
+    def _module_name(package_name: str, root: Path, source: Path) -> str:
+        """把包内文件路径转换为精确模块名。"""
+        relative = source.relative_to(root)
+        parts = list(relative.parts)
+        if parts[-1] == "__init__.py":
+            parts.pop()
+        else:
+            parts[-1] = source.stem
+        return ".".join((package_name, *parts))
+
+
+def scan_decorated_classes(
+    package_name: str,
+    sources: DecoratorSources,
+) -> tuple[DecoratedClass, ...]:
+    """以函数形式执行一次通用装饰器扫描。"""
+    return ASTScanner(sources).scan_package(package_name)
+
+
+__all__ = [
+    "ASTScanner",
+    "DecoratedClass",
+    "DecoratorSources",
+    "StaticScanError",
+    "scan_decorated_classes",
+]

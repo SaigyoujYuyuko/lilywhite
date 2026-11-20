@@ -7,6 +7,7 @@ import pytest
 from litestar.testing import TestClient
 
 from lilywhite import LilyWhiteApplication
+from lilywhite.app.ast_scan import scan_decorated_classes
 from lilywhite.app.discovery import StaticDiscoveryError, scan_decorated_modules
 from lilywhite.config import AppProperties
 
@@ -57,6 +58,14 @@ def test_ast_scan_resolves_aliases_without_importing_business_modules(
             "nested/conditional.py": (
                 "from lilywhite import service\nif True:\n    @service\n    class Hidden:\n        pass\n"
             ),
+            "infra/configuration.py": (
+                "from lilywhite import bean, configuration\n"
+                "@configuration\n"
+                "class Infrastructure:\n"
+                "    @bean\n"
+                "    def engine(self) -> str:\n"
+                '        return "memory"\n'
+            ),
             "other.py": ("def service(target):\n    return target\n@service\nclass Unrelated:\n    pass\n"),
         },
     )
@@ -66,12 +75,47 @@ def test_ast_scan_resolves_aliases_without_importing_business_modules(
 
     assert modules == (
         f"{package}.http.routes",
+        f"{package}.infra.configuration",
         f"{package}.logic.use_case",
         f"{package}.nested",
         f"{package}.store.memory",
     )
     assert f"{package}.http.routes" not in sys.modules
     assert f"{package}.logic.use_case" not in sys.modules
+
+
+def test_generic_ast_scanner_accepts_custom_decorator_sources(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """通用扫描器应能识别任意框架的直接导入和模块别名装饰器。"""
+    package = "generic_ast_app"
+    _write_package(
+        tmp_path,
+        package,
+        {
+            "__init__.py": '"""通用扫描示例。"""\n',
+            "components.py": (
+                "import imaginary_framework as imf\n"
+                "from imaginary_framework import service as s\n"
+                "@s()\n"
+                "class First:\n"
+                "    pass\n"
+                "@imf.service\n"
+                "class Second:\n"
+                "    pass\n"
+            ),
+        },
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    discovered = scan_decorated_classes(package, {"service": frozenset({"imaginary_framework"})})
+
+    assert [(item.class_name, item.decorator) for item in discovered] == [
+        ("First", "service"),
+        ("Second", "service"),
+    ]
+    assert all(item.module == f"{package}.components" for item in discovered)
 
 
 def test_nonstandard_layer_names_complete_real_http_and_di(

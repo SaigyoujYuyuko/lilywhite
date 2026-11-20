@@ -27,7 +27,7 @@ my_app/
 
 `web`、`logic`、`store` 都不是固定名字。业务入口在哪个顶层包，框架就 AST 解析哪个包，选出带 LilyWhite 装饰器的模块，再精确导入。
 
-扫描只把模块级类当作注册目标；普通工具模块不会被无差别导入。直接导入和别名都可以：
+扫描只把模块级类当作注册目标；普通工具模块不会被无差别导入。`@configuration` 配置类也会被发现，其中的 `@bean` 方法随类一起注册。直接导入和别名都可以：
 
 ```python
 from lilywhite import service as s
@@ -239,6 +239,41 @@ class RedisCacheComponent:
 ```
 
 Component 可以注入 Service 或其他组件；需要暴露给 HTTP 参数注入的业务用例则应使用 `@service`。
+
+## 配置类与工厂 Bean
+
+`@component` 适合大多数“给框架一个类，让框架按构造器创建”的场景。需要调用第三方工厂，或者希望通过一段明确的 Python 逻辑创建对象时，再使用 `@configuration` 和 `@bean`：
+
+```python
+# my_app/infra/configuration.py
+from lilywhite import bean, configuration
+
+@configuration
+class BusinessConfiguration:
+    @bean
+    def settings(self) -> Settings:
+        return get_settings()
+
+    @bean
+    def engine(self, settings: Settings) -> AsyncEngine:
+        return create_async_engine(
+            settings.mysql_url,
+            pool_pre_ping=True,
+            pool_size=settings.mysql_pool_size,
+        )
+```
+
+配置类构造器必须无参数。依赖写在 `@bean` 方法参数上，容器按参数类型注入；返回类型就是 Bean 的注册类型。上面的 `engine` 会得到由第一个方法创建的 `Settings`。
+
+第一版遵循这些规则：
+
+- 工厂方法使用同步函数，支持 `@bean` 和 `@bean()`。
+- Bean 是应用级 Singleton，启动阶段完成依赖图检查并预创建。
+- 同一返回类型只能注册一次，不与 Component、Service 或其他 Bean 隐式竞争。
+- 返回值实现 `initialize()` / `close()` 时，同样进入托管组件生命周期。
+- 不要给同一个类同时加 `@component` 或用 `@bean` 再注册一次，选择一种装配方式即可。
+
+这里的 `@configuration` 是**对象装配规则**，与 `Config` 负责的 YAML、环境变量和字段校验不是一回事。
 
 ## 容器会检查什么
 

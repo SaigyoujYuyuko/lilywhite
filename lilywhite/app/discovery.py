@@ -1,4 +1,4 @@
-"""AST 静态模块发现、精确导入与 Controller 收集。"""
+"""LilyWhite 装饰器筛选、精确导入与 Controller 收集。"""
 
 import ast
 from importlib import import_module
@@ -12,6 +12,9 @@ from litestar.handlers.websocket_handlers import WebsocketListener
 from ..controller.registry import registered_controllers
 from ..controller.websocket import registered_websocket_controllers
 from ..logger import LoggerManager
+from .ast_scan import StaticScanError, scan_decorated_classes
+
+StaticDiscoveryError = StaticScanError
 
 log = LoggerManager.get_logger("DI")
 
@@ -23,11 +26,8 @@ _DECORATOR_SOURCES = {
     "service": frozenset({"lilywhite", "lilywhite.services.registry"}),
     "repository": frozenset({"lilywhite", "lilywhite.storage.registry"}),
     "component": frozenset({"lilywhite", "lilywhite.utils.component"}),
+    "configuration": frozenset({"lilywhite", "lilywhite.utils.configuration"}),
 }
-
-
-class StaticDiscoveryError(ValueError):
-    """业务源码无法安全地进行静态发现。"""
 
 
 def normalize_backends(selection: BackendSelection) -> tuple[str, ...]:
@@ -39,128 +39,40 @@ def normalize_backends(selection: BackendSelection) -> tuple[str, ...]:
     return normalized
 
 
-def _dotted_name(node: ast.AST) -> str | None:
-    """把 Name 和 Attribute 表达式还原为点分名称。"""
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        owner = _dotted_name(node.value)
-        return None if owner is None else f"{owner}.{node.attr}"
-    return None
-
-
-def _import_aliases(tree: ast.Module) -> tuple[dict[str, str], dict[str, str]]:
-    """收集模块级导入中 LilyWhite 装饰器与模块的本地别名。"""
-    decorators: dict[str, str] = {}
-    modules: dict[str, str] = {}
-    for node in tree.body:
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name == "lilywhite" or alias.name.startswith("lilywhite."):
-                    local_name = alias.asname or alias.name.partition(".")[0]
-                    modules[local_name] = "lilywhite" if alias.asname is None else alias.name
-        elif isinstance(node, ast.ImportFrom) and node.module is not None:
-            for alias in node.names:
-                if alias.name in _DECORATOR_SOURCES and node.module in _DECORATOR_SOURCES[alias.name]:
-                    decorators[alias.asname or alias.name] = alias.name
-    return decorators, modules
-
-
-def _decorator_name(
-    decorator: ast.expr,
-    decorators: dict[str, str],
-    modules: dict[str, str],
-) -> str | None:
-    """识别直接导入和模块属性两种 LilyWhite 装饰器写法。"""
-    expression = decorator.func if isinstance(decorator, ast.Call) else decorator
-    if isinstance(expression, ast.Name):
-        return decorators.get(expression.id)
-
-    dotted = _dotted_name(expression)
-    if dotted is None:
-        return None
-    root, separator, attributes = dotted.partition(".")
-    module_name = modules.get(root)
-    if module_name is None:
-        return None
-    qualified = f"{module_name}{separator}{attributes}"
-    owner, _, name = qualified.rpartition(".")
-    if name in _DECORATOR_SOURCES and owner in _DECORATOR_SOURCES[name]:
-        return name
-    return None
-
-
 def _repository_backend(decorator: ast.expr, source: Path) -> str:
     """读取 Repository 的静态后端名，动态表达式会在导入前明确报错。"""
     location = f"{source}:{decorator.lineno}"
     if not isinstance(decorator, ast.Call):
-        raise StaticDiscoveryError(f"{location} 的 @repository 必须显式声明字符串 backend")
+        raise StaticScanError(f"{location} 的 @repository 必须显式声明字符串 backend")
     keyword = next((item for item in decorator.keywords if item.arg == "backend"), None)
     if (
         keyword is None
         or not isinstance(keyword.value, ast.Constant)
         or not isinstance(keyword.value.value, str)
     ):
-        raise StaticDiscoveryError(f"{location} 的 @repository backend 必须是字符串字面量")
+        raise StaticScanError(f"{location} 的 @repository backend 必须是字符串字面量")
     backend = keyword.value.value.strip()
     if not backend:
-        raise StaticDiscoveryError(f"{location} 的 @repository backend 不能为空")
+        raise StaticScanError(f"{location} 的 @repository backend 不能为空")
     return backend
-
-
-def _module_name(package_name: str, root: Path, source: Path) -> str:
-    """把包内文件路径转换为可导入的精确模块名。"""
-    relative = source.relative_to(root)
-    parts = list(relative.parts)
-    if parts[-1] == "__init__.py":
-        parts.pop()
-    else:
-        parts[-1] = source.stem
-    return ".".join((package_name, *parts))
-
-
-def _contains_selected_decorator(tree: ast.Module, source: Path, backends: tuple[str, ...]) -> bool:
-    """只检查模块级类，并按启用后端筛选 Repository Adapter。"""
-    decorators, modules = _import_aliases(tree)
-    selected = False
-    for node in tree.body:
-        if not isinstance(node, ast.ClassDef):
-            continue
-        for decorator in node.decorator_list:
-            name = _decorator_name(decorator, decorators, modules)
-            if name is None:
-                continue
-            if name != "repository" or _repository_backend(decorator, source) in backends:
-                selected = True
-    return selected
 
 
 def scan_decorated_modules(
     package_name: str,
     backends: BackendSelection = "memory",
 ) -> tuple[str, ...]:
-    """AST 解析业务包，返回含 LilyWhite 装饰器的排序去重模块列表。"""
+    """按 LilyWhite 装饰器和启用后端筛选需要导入的模块。"""
     enabled_backends = normalize_backends(backends)
-    package = import_module(package_name)
-    spec = package.__spec__
-    if spec is None or spec.submodule_search_locations is None:
-        raise TypeError(f"扫描目标不是包：{package_name}")
-
     log.debug("static scan start package={} backends={}", package_name, enabled_backends)
     discovered: set[str] = set()
-    for location in spec.submodule_search_locations:
-        root = Path(location)
-        for source in sorted(root.rglob("*.py")):
-            try:
-                tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-            except SyntaxError as error:
-                raise StaticDiscoveryError(
-                    f"无法解析业务源码 {source}:{error.lineno}：{error.msg}"
-                ) from error
-            if _contains_selected_decorator(tree, source, enabled_backends):
-                module_name = _module_name(package_name, root, source)
-                discovered.add(module_name)
-                log.trace("static module selected module={}", module_name)
+    for item in scan_decorated_classes(package_name, _DECORATOR_SOURCES):
+        if (
+            item.decorator == "repository"
+            and _repository_backend(item.node, item.source) not in enabled_backends
+        ):
+            continue
+        discovered.add(item.module)
+        log.trace("static module selected module={}", item.module)
 
     modules = tuple(sorted(discovered))
     log.debug("static scan complete package={} modules={}", package_name, len(modules))
@@ -251,3 +163,16 @@ def discover_websocket_controllers(package_name: str) -> list[type[WebsocketList
         )
     log.debug("websocket discovery complete package={} controllers={}", package_name, len(discovered))
     return discovered
+
+
+__all__ = [
+    "BackendSelection",
+    "StaticDiscoveryError",
+    "discover_business_controllers",
+    "discover_controllers",
+    "discover_websocket_controllers",
+    "import_decorated_modules",
+    "import_package_modules",
+    "normalize_backends",
+    "scan_decorated_modules",
+]
