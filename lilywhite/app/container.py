@@ -17,7 +17,13 @@ from ..decorators import service as service_registrations
 from ..decorators.conditional import condition_enabled
 from ..decorators.configuration import _impl as configuration_registrations
 from ..decorators.configuration._impl import BeanFactory
-from ..lifecycle import ManagedComponent, RequestScopedResource
+from ..lifecycle import (
+    AdaptedResource,
+    ManagedComponent,
+    RequestScopedResource,
+    ResourceCloser,
+    close_resource,
+)
 from ..logger import LoggerManager
 from ..qualifier import Qualifier, qualifier_name
 from ..utils.registry import LifetimeType
@@ -49,10 +55,12 @@ class _DependencyParameter(msgspec.Struct, frozen=True):
 
 
 class _BeanRegistration(msgspec.Struct, frozen=True):
-    """一个已经绑定配置类实例的同步工厂方法。"""
+    """一个已经绑定配置类实例的同步工厂方法及其资源策略。"""
 
     factory: BeanFactory
     dependencies: list[_DependencyParameter]
+    lifetime: LifetimeType
+    closer: ResourceCloser | None
 
 
 class DependencyInjectionException(RuntimeError):
@@ -90,9 +98,10 @@ class DependencyScope:
     """在一次请求或后台任务内共享 Scoped 实例并创建 Transient 实例。"""
 
     def __init__(self, container: DependencyContainer) -> None:
-        """绑定应用容器并创建当前作用域的实例表。"""
+        """绑定应用容器并创建当前作用域的实例和资源表。"""
         self._container = container
         self._instances: dict[_DependencyKey, object] = {}
+        self._resources: list[tuple[_DependencyKey, object]] = []
         self._resolving: list[_DependencyKey] = []
 
     def resolve[T](self, target: type[T], qualifier: str | None = None) -> T:
@@ -118,16 +127,26 @@ class DependencyScope:
             self._resolving.pop()
         if lifetime is LifetimeType.SCOPED:
             self._instances[key] = instance
+        if self._container._resource_closer(key) is not None or isinstance(instance, RequestScopedResource):
+            self._resources.append((key, instance))
         log.debug("dependency constructed target={} lifetime={}", _key_name(key), lifetime.value)
         return instance
 
     async def close(self) -> None:
-        """按构造逆序关闭当前作用域的资源，并允许重复调用。"""
-        instances = list(self._instances.values())
+        """按构造逆序释放 Scoped 和 Transient 资源，收集全部关闭错误。"""
+        resources = list(self._resources)
+        self._resources.clear()
         self._instances.clear()
-        for instance in reversed(instances):
-            if isinstance(instance, RequestScopedResource):
-                await instance.close()
+        errors: list[Exception] = []
+        for key, instance in reversed(resources):
+            try:
+                await self._container._close_scoped_resource(key, instance)
+            except Exception as error:  # noqa: BLE001
+                errors.append(error)
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise ExceptionGroup("依赖作用域关闭失败", errors)
 
 
 class DependencyContainer:
@@ -148,6 +167,7 @@ class DependencyContainer:
         self._beans: dict[_DependencyKey, _BeanRegistration] = {}
         self._resolving: list[_DependencyKey] = []
         self._checked_unqualified: set[type[object]] = set()
+        self._constructor_metadata: dict[type[object], list[_DependencyParameter]] = {}
 
     def create_scope(self) -> DependencyScope:
         """为后台任务创建显式、由调用方关闭的依赖作用域。"""
@@ -207,8 +227,16 @@ class DependencyContainer:
         self._lifetimes[key] = lifetime
         self._implementations[key] = implementation
 
-    def register_bean(self, configuration: object, factory: BeanFactory, *, name: str | None = None) -> None:
-        """注册配置类中的同步工厂方法及其返回类型和可选限定名。"""
+    def register_bean(
+        self,
+        configuration: object,
+        factory: BeanFactory,
+        *,
+        name: str | None = None,
+        lifetime: LifetimeType = LifetimeType.SINGLETON,
+        close: ResourceCloser | None = None,
+    ) -> None:
+        """注册同步工厂方法及其返回类型、限定名和资源策略。"""
         if not condition_enabled(factory, self._properties):
             return
         if iscoroutinefunction(factory):
@@ -221,14 +249,15 @@ class DependencyContainer:
             raise DependencyInjectionException(f"Bean 重复注册：{_key_name(key)}")
         dependencies = self._bean_dependencies(factory)
         bound_factory = factory.__get__(configuration, type(configuration))
-        self._beans[key] = _BeanRegistration(bound_factory, dependencies)
-        self._lifetimes[key] = LifetimeType.SINGLETON
+        self._beans[key] = _BeanRegistration(bound_factory, dependencies, lifetime, close)
+        self._lifetimes[key] = lifetime
         self._implementations[key] = return_type
         log.debug(
-            "bean registered target={} factory={}.{} lifetime=singleton",
+            "bean registered target={} factory={}.{} lifetime={}",
             _key_name(key),
             factory.__module__,
             factory.__qualname__,
+            lifetime.value,
         )
 
     def managed_components(self) -> Iterator[ManagedComponent]:
@@ -240,13 +269,19 @@ class DependencyContainer:
         """为每个托管实例生成包含限定名的唯一生命周期名称。"""
         seen: set[int] = set()
         for key, instance in self._instances.items():
-            if id(instance) in seen or not isinstance(instance, ManagedComponent):
+            if id(instance) in seen:
+                continue
+            bean = self._beans.get(key)
+            managed: object = instance
+            if bean is not None and bean.closer is not None:
+                managed = AdaptedResource(instance, bean.closer)
+            if not isinstance(managed, ManagedComponent):
                 continue
             seen.add(id(instance))
             name = dependency_name(key.target)
             if key.qualifier is not None:
                 name = f"{name}_{key.qualifier}"
-            yield name, instance
+            yield name, managed
 
     def build(self) -> None:
         """验证完整依赖图并提前创建全部 Singleton。"""
@@ -259,7 +294,8 @@ class DependencyContainer:
         for key in sorted(self._beans, key=_key_name):
             self._validate(key, ())
         for key in sorted(self._beans, key=_key_name):
-            self._resolve_singleton(key)
+            if self._lifetimes[key] is LifetimeType.SINGLETON:
+                self._resolve_singleton(key)
         log.debug(
             "dependency graph build complete services={} beans={}", len(self._services), len(self._beans)
         )
@@ -418,6 +454,15 @@ class DependencyContainer:
         log.trace("request dependency scope created")
         return scope
 
+    def _resource_closer(self, key: _DependencyKey) -> ResourceCloser | None:
+        """返回 Bean 显式声明的关闭适配器，其他依赖使用自身 close。"""
+        bean = self._beans.get(key)
+        return None if bean is None else bean.closer
+
+    async def _close_scoped_resource(self, key: _DependencyKey, instance: object) -> None:
+        """统一释放当前作用域创建的 Bean、Service、Repository 或 Component。"""
+        await close_resource(instance, self._resource_closer(key))
+
     def _construct(self, key: _DependencyKey, scope: DependencyScope | None) -> object:
         """使用单例解析器或请求作用域递归构造目标。"""
         implementation = self._implementations[key]
@@ -446,11 +491,16 @@ class DependencyContainer:
         return factory(**arguments)
 
     def _dependencies(self, key: _DependencyKey) -> list[_DependencyParameter]:
-        """读取类构造器或 Bean 工厂方法需要的依赖。"""
+        """Bean 在注册时缓存，构造器在当前容器的首次图校验时缓存。"""
         bean = self._beans.get(key)
         if bean is not None:
             return bean.dependencies
-        return self._constructor_dependencies(self._implementations[key])
+        implementation = self._implementations[key]
+        dependencies = self._constructor_metadata.get(implementation)
+        if dependencies is None:
+            dependencies = self._constructor_dependencies(implementation)
+            self._constructor_metadata[implementation] = dependencies
+        return dependencies
 
     @staticmethod
     def _bean_dependencies(factory: BeanFactory) -> list[_DependencyParameter]:
@@ -522,12 +572,12 @@ def create_container(
     """自动收集装饰器，按普通组件、Bean、后备组件的顺序构造依赖图。"""
     package_names = ("lilywhite",) if business_package is None else ("lilywhite", business_package)
     log.debug("dependency container scan start business_package={}", business_package)
+    properties = properties or AppProperties()
     import_package_modules("lilywhite.utils")
     import_package_modules("lilywhite.services")
     if business_package is not None:
-        import_decorated_modules(business_package)
+        import_decorated_modules(business_package, properties=properties)
 
-    properties = properties or AppProperties()
     container = DependencyContainer(package_names=package_names)
     container.register_instance(AppProperties, properties)
     registrations = tuple(component_registrations.registered_components(package_names))
@@ -553,6 +603,8 @@ def create_container(
                 configuration,
                 bean_registration.factory,
                 name=bean_registration.qualifier,
+                lifetime=bean_registration.lifetime,
+                close=bean_registration.closer,
             )
     for registration in registrations:
         if not registration.fallback:

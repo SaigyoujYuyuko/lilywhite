@@ -5,10 +5,11 @@ from lilywhite.config import section, setting
 
 
 class ExampleProperties(AppProperties):
-    """在框架配置之上增加问候功能开关。"""
+    """在框架配置之上增加问候开关和可选业务模块。"""
 
     features = section(
         spring_greeting=setting(False),
+        catalog=setting(False),
     )
 
 

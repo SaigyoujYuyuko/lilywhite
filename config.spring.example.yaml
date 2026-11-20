@@ -4,3 +4,4 @@ version: 1
 
 features:
   spring_greeting: true
+  catalog: true

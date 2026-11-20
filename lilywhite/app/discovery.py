@@ -1,5 +1,7 @@
-"""LilyWhite 装饰器筛选、精确导入与 Controller 收集。"""
+"""LilyWhite 装饰器筛选、静态条件排除、精确导入与 Controller 收集。"""
 
+import ast
+from collections import defaultdict
 from importlib import import_module
 from pkgutil import walk_packages
 from types import ModuleType
@@ -7,10 +9,12 @@ from types import ModuleType
 from litestar import Controller
 from litestar.handlers.websocket_handlers import WebsocketListener
 
+from ..config import AppProperties
+from ..decorators.conditional import ConditionRegistration
 from ..decorators.controller import registered_controllers
 from ..decorators.websocket import registered_websocket_controllers
 from ..logger import LoggerManager
-from .ast_scan import StaticScanError, scan_decorated_classes
+from .ast_scan import DecoratedClass, StaticScanError, scan_decorated_classes
 
 StaticDiscoveryError = StaticScanError
 
@@ -23,26 +27,65 @@ _DECORATOR_SOURCES = {
     "repository": frozenset({"lilywhite", "lilywhite.decorators.repository"}),
     "component": frozenset({"lilywhite", "lilywhite.decorators.component"}),
     "configuration": frozenset({"lilywhite", "lilywhite.decorators.configuration"}),
+    "enabled": frozenset({"lilywhite", "lilywhite.decorators.conditional"}),
 }
+_CONDITIONAL_DECORATORS = frozenset({"service", "repository", "component", "configuration"})
 
 
-def scan_decorated_modules(package_name: str) -> tuple[str, ...]:
-    """按 LilyWhite 装饰器筛选需要导入的模块，不在扫描阶段执行条件。"""
+def _static_condition_path(item: DecoratedClass) -> str | None:
+    """只提取字面量配置路径；lambda 等动态条件仍需真实导入后计算。"""
+    condition = item.condition
+    if condition is None or not isinstance(condition, ast.Call) or condition.keywords:
+        return None
+    if len(condition.args) != 1 or not isinstance(condition.args[0], ast.Constant):
+        return None
+    path = condition.args[0].value
+    return path if isinstance(path, str) else None
+
+
+def _statically_disabled(item: DecoratedClass, properties: AppProperties) -> bool:
+    """在导入前排除明确关闭的集成模块，不推测任意 Python 条件。"""
+    if item.decorator not in _CONDITIONAL_DECORATORS:
+        return False
+    path = _static_condition_path(item)
+    if path is None:
+        return False
+    return not ConditionRegistration(path=path).evaluate(properties)
+
+
+def scan_decorated_modules(
+    package_name: str,
+    *,
+    properties: AppProperties | None = None,
+) -> tuple[str, ...]:
+    """筛选需要导入的模块；所有静态条件均关闭时跳过整个模块。"""
     log.debug("static scan start package={}", package_name)
-    discovered: set[str] = set()
+    grouped: dict[str, list[DecoratedClass]] = defaultdict(list)
     for item in scan_decorated_classes(package_name, _DECORATOR_SOURCES):
-        discovered.add(item.module)
-        log.trace("static module selected module={}", item.module)
+        if item.decorator != "enabled":
+            grouped[item.module].append(item)
 
-    modules = tuple(sorted(discovered))
+    discovered: list[str] = []
+    for module, items in sorted(grouped.items()):
+        if properties is not None and all(_statically_disabled(item, properties) for item in items):
+            log.debug("static module skipped by enabled path module={}", module)
+            continue
+        discovered.append(module)
+        log.trace("static module selected module={}", module)
+
+    modules = tuple(discovered)
     log.debug("static scan complete package={} modules={}", package_name, len(modules))
     return modules
 
 
-def import_decorated_modules(package_name: str) -> list[ModuleType]:
-    """只导入静态扫描选中的模块，让原有装饰器完成真实注册。"""
+def import_decorated_modules(
+    package_name: str,
+    *,
+    properties: AppProperties | None = None,
+) -> list[ModuleType]:
+    """只导入静态扫描和静态条件共同选中的模块。"""
     imported: list[ModuleType] = []
-    for module_name in scan_decorated_modules(package_name):
+    for module_name in scan_decorated_modules(package_name, properties=properties):
         log.trace("module import module={}", module_name)
         imported.append(import_module(module_name))
     return imported
@@ -96,9 +139,13 @@ def discover_controllers(package_name: str = "lilywhite.controller") -> list[typ
     return _sorted_controllers(package_name)
 
 
-def discover_business_controllers(package_name: str) -> list[type[Controller]]:
-    """静态发现并精确导入业务模块，再收集当前业务包的 Controller。"""
-    import_decorated_modules(package_name)
+def discover_business_controllers(
+    package_name: str,
+    *,
+    properties: AppProperties | None = None,
+) -> list[type[Controller]]:
+    """按同一份配置发现和导入业务 Controller，不重新启用静态排除模块。"""
+    import_decorated_modules(package_name, properties=properties)
     return _sorted_controllers(package_name)
 
 

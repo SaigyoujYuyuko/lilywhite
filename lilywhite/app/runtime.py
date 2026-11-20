@@ -23,6 +23,7 @@ class ApplicationRuntime:
     ) -> None:
         """创建运行时并自动注册当前业务包与框架组件。"""
         self.business_package = business_package
+        self.properties = properties
         self.health_center = HealthCenter()
         self.request_metrics = RequestMetrics(properties.operations.metrics_window_size)
         self.cors_allow_origins = properties.server.cors.allow_origins
@@ -48,8 +49,19 @@ class ApplicationRuntime:
         self.lifespan.register(name, "STOP")(lambda: self._stop_component(name, component))
 
     async def _start_component(self, name: str, component: ManagedComponent) -> None:
-        """初始化组件并在成功后上报健康状态。"""
-        await component.initialize()
+        """初始化失败时先释放当前组件，再由 LifespanManager 回滚先前组件。"""
+        try:
+            await component.initialize()
+        except Exception as start_error:
+            try:
+                await component.close()
+            except Exception as close_error:  # noqa: BLE001
+                raise ExceptionGroup(
+                    f"组件 {name} 初始化和回滚均失败", [start_error, close_error]
+                ) from start_error
+            finally:
+                self.health_center.set_component(name, False)
+            raise
         self.health_center.set_component(name, True)
 
     async def _stop_component(self, name: str, component: ManagedComponent) -> None:

@@ -1,36 +1,25 @@
 """配置类与同步工厂 Bean 的显式注册装饰器。（内部实现）"""
 
 from collections.abc import Callable, Iterator
-from typing import Protocol, overload
+from typing import overload
 
 import msgspec
 
+from ...lifecycle import ResourceCloser
 from ...qualifier import qualifier_name
-from ...utils.registry import Registry
+from ...utils.registry import LifetimeType, Registry
 from ..registry import DecoratorRegistry, qualified_name
 
-
-class BeanFactory(Protocol):
-    """普通函数和绑定方法都支持的工厂方法协议。"""
-
-    __name__: str
-    __module__: str
-    __qualname__: str
-
-    def __call__(self, *args: object, **kwargs: object) -> object:
-        """接受容器解析后的依赖并创建 Bean。"""
-        ...
-
-    def __get__(self, instance: object, owner: type[object] | None = None) -> BeanFactory:
-        """把未绑定函数绑定到配置类实例；绑定方法保持原绑定关系。"""
-        ...
+type BeanFactory = Callable[..., object]
 
 
 class BeanRegistration(msgspec.Struct, frozen=True):
-    """一个 Bean 工厂及其可选限定名。"""
+    """一个 Bean 工厂及其限定名、生命周期和关闭适配器。"""
 
     factory: BeanFactory
     qualifier: str | None = None
+    lifetime: LifetimeType = LifetimeType.SINGLETON
+    closer: ResourceCloser | None = None
 
     @property
     def __name__(self) -> str:  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -71,20 +60,38 @@ def configuration[T](target: type[T] | None = None) -> type[T] | Callable[[type[
 
 
 @overload
-def bean[F: BeanFactory](target: F, *, name: str | None = None) -> F: ...
+def bean[**P, R](
+    target: Callable[P, R],
+    *,
+    name: str | None = None,
+    lifetime: LifetimeType = LifetimeType.SINGLETON,
+    close: ResourceCloser | None = None,
+) -> Callable[P, R]: ...
 
 
 @overload
-def bean[F: BeanFactory](target: None = None, *, name: str | None = None) -> Callable[[F], F]: ...
+def bean[**P, R](
+    target: None = None,
+    *,
+    name: str | None = None,
+    lifetime: LifetimeType = LifetimeType.SINGLETON,
+    close: ResourceCloser | None = None,
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
-def bean[F: BeanFactory](target: F | None = None, *, name: str | None = None) -> F | Callable[[F], F]:
-    """把普通方法标记为 Bean 工厂，可用名称区分相同返回类型。"""
+def bean[**P, R](
+    target: Callable[P, R] | None = None,
+    *,
+    name: str | None = None,
+    lifetime: LifetimeType = LifetimeType.SINGLETON,
+    close: ResourceCloser | None = None,
+) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
+    """注册同步 Bean 工厂，并声明实例名称、生命周期和可选关闭适配器。"""
     qualifier = qualifier_name(name)
 
-    def register(factory: F) -> F:
-        registration = BeanRegistration(factory, qualifier)
-        key = f"{qualifier or ''}:{_factory_key(factory)}"
+    def register(factory: Callable[P, R]) -> Callable[P, R]:
+        registration = BeanRegistration(factory, qualifier, lifetime, close)
+        key = f"{qualifier or ''}:{lifetime.value}:{_factory_key(factory)}"
         bean_registry.register("bean", key, registration)
         return factory
 
@@ -97,7 +104,7 @@ def registered_configurations(package_names: tuple[str, ...] | None = None) -> I
 
 
 def registered_beans(configuration_type: type[object]) -> Iterator[BeanRegistration]:
-    """按注册顺序返回当前配置类显式标记的工厂及限定名。"""
+    """按注册顺序返回当前配置类显式标记的完整工厂元数据。"""
     prefix = f"{_type_key(configuration_type)}."
     for registration in bean_registry.by_namespace("bean"):
         if _factory_key(registration.factory).startswith(prefix):

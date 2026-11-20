@@ -38,3 +38,6 @@ operations:
 features:
   # false 使用默认内存问候；true 切换为春季问候实现。
   spring_greeting: false
+
+  # true 时装配 catalog 模块；false 时连它的模块导入也会跳过。
+  catalog: false

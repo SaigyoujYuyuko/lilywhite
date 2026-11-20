@@ -58,7 +58,13 @@ def test_named_beans_support_multiple_databases_and_require_qualifier() -> None:
     container = DependencyContainer()
     clients = DatabaseClients()
     for registration in registered_beans(DatabaseClients):
-        container.register_bean(clients, registration.factory, name=registration.qualifier)
+        container.register_bean(
+            clients,
+            registration.factory,
+            name=registration.qualifier,
+            lifetime=registration.lifetime,
+            close=registration.closer,
+        )
     container.build()
 
     pair = container.resolve(EnginePair)

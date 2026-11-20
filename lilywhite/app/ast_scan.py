@@ -15,13 +15,14 @@ class StaticScanError(ValueError):
 
 @dataclass(frozen=True)
 class DecoratedClass:
-    """一个模块级类及其命中的装饰器。"""
+    """一个模块级类及其命中的装饰器和静态条件表达式。"""
 
     module: str
     class_name: str
     decorator: str
     node: ast.expr
     source: Path
+    condition: ast.expr | None = None
 
 
 class ASTScanner:
@@ -62,11 +63,19 @@ class ASTScanner:
         for class_node in tree.body:
             if not isinstance(class_node, ast.ClassDef):
                 continue
+            condition = self._class_condition(class_node, decorators, modules)
             for decorator_node in class_node.decorator_list:
                 name = self._decorator_name(decorator_node, decorators, modules)
                 if name is not None:
                     discovered.append(
-                        DecoratedClass(module_name, class_node.name, name, decorator_node, source)
+                        DecoratedClass(
+                            module_name,
+                            class_node.name,
+                            name,
+                            decorator_node,
+                            source,
+                            condition,
+                        )
                     )
         return tuple(discovered)
 
@@ -93,6 +102,18 @@ class ASTScanner:
         return {
             source.partition(".")[0] for source_group in self._sources.values() for source in source_group
         }
+
+    def _class_condition(
+        self,
+        class_node: ast.ClassDef,
+        decorators: dict[str, str],
+        modules: dict[str, str],
+    ) -> ast.expr | None:
+        """找到类上的 enabled 表达式，但不在 AST 阶段执行它。"""
+        for decorator in class_node.decorator_list:
+            if self._decorator_name(decorator, decorators, modules) == "enabled":
+                return decorator
+        return None
 
     def _decorator_name(
         self,

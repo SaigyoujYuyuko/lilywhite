@@ -368,9 +368,10 @@ class BusinessConfiguration:
 工厂 Bean 遵循这些规则：
 
 - 工厂方法使用同步函数，支持 `@bean`、`@bean()` 和 `@bean(name="...")`。
-- Bean 是应用级 Singleton，启动阶段完成依赖图检查并预创建。
+- `lifetime=` 支持 Singleton、Scoped 和 Transient；默认 Singleton 在启动阶段预创建，其他 Bean 由请求或后台任务作用域创建。
+- `close=AsyncClient.aclose` 这类显式参数可适配第三方关闭方法；对象自身的 `initialize()` 仍会执行。
 - 同一返回类型和限定名的组合只能注册一次，不与 Component、Service 或其他 Bean 隐式竞争。
-- 返回值实现 `initialize()` / `close()` 时，同样进入托管组件生命周期。
+- Scoped 和 Transient 资源在作用域末尾逆序释放，多个清理错误会汇总，不会因第一个错误停止。
 - 不要给同一个类同时加 `@component` 或用 `@bean` 再注册一次，选择一种装配方式即可。
 
 这里的 `@configuration` 是**对象装配规则**，与 `Config` 负责的 YAML、环境变量和字段校验不是一回事。

@@ -35,7 +35,7 @@ class BillingService:
         self._billing = billing
 ```
 
-两个 Bean 都是独立的 Singleton。实现 `initialize()` / `close()` 的客户端会分别进入应用生命周期；`AsyncClient` 的关闭适配可以集中在工厂返回的托管对象里完成。
+两个 Bean 默认都是独立的 Singleton。给工厂加 `close=AsyncClient.aclose` 即可分别接入应用关闭流程；对象自己的 `initialize()` 仍会执行。
 
 如果只需要容器内解析，也可以显式写名称：
 
@@ -55,16 +55,16 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 @configuration
 class Databases:
-    @bean(name="primary")
+    @bean(name="primary", close=AsyncEngine.dispose)
     def primary_engine(self) -> AsyncEngine:
         return create_async_engine("postgresql+asyncpg://.../main", pool_pre_ping=True)
 
-    @bean(name="replica")
+    @bean(name="replica", close=AsyncEngine.dispose)
     def replica_engine(self) -> AsyncEngine:
         return create_async_engine("postgresql+asyncpg://.../replica", pool_pre_ping=True)
 ```
 
-业务对象用 `Annotated[AsyncEngine, Qualifier("primary")]` 和 `Annotated[AsyncEngine, Qualifier("replica")]` 分别接收。请求级 `AsyncSession` 不应跟着 Engine 做成全局 Singleton；事务边界和 Session 生命周期属于后续独立约定。
+业务对象用 `Annotated[AsyncEngine, Qualifier("primary")]` 和 `Annotated[AsyncEngine, Qualifier("replica")]` 分别接收。请求级 `AsyncSession` 不应跟着 Engine 做成全局 Singleton；完整事务写法见[数据库事务](transactions.md)。
 
 ## 多个 Repository 或 Component
 

@@ -12,20 +12,22 @@ uv sync --locked
 uv run pytest tests -q
 ```
 
-测试覆盖公开入口、真实 HTTP/WebSocket 请求、构造器注入、AST 静态发现、配置校验、Banner 和生命周期。
+测试覆盖公开入口、真实 HTTP/WebSocket 请求、构造器注入、AST 静态发现、配置校验、事务、并发、异常清理、多应用隔离和生命周期。
+
+本地性能基准见[性能文档](performance.md)，脚本位于 `benchmarks/`，结果写入不进入 Git 的 `.local/`。
 
 ## Lint、格式和类型
 
 ```bash
-uv run ruff check lilywhite example tests
-uv run ruff format --check lilywhite example tests
+uv run ruff check lilywhite example tests benchmarks
+uv run ruff format --check lilywhite example tests benchmarks
 uv run mypy
 ```
 
 需要应用格式化时：
 
 ```bash
-uv run ruff format lilywhite example tests
+uv run ruff format lilywhite example tests benchmarks
 ```
 
 ## 构建

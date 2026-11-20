@@ -9,9 +9,11 @@ from .decorators.controller import controller
 from .decorators.http import get, post, put, delete, patch
 from .decorators.repository import repository
 from .decorators.service import service
+from .decorators.transactional import transactional
 from .decorators.websocket import websocket_controller
 from .logger import override_logger
 from .qualifier import Qualifier
+from .storage import UnitOfWork
 from .utils.file import AyaFileIO, FileIO
 from .websocket import WebSocketClient
 
@@ -22,6 +24,7 @@ __all__ = [
     "LilyWhiteApplication",
     "LilywhiteMain",
     "Qualifier",
+    "UnitOfWork",
     "WebSocketClient",
     "bean",
     "component",
@@ -32,6 +35,7 @@ __all__ = [
     "repository",
     "run",
     "service",
+    "transactional",
     "websocket_controller",
     # HTTP 方法
     "get",

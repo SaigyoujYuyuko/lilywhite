@@ -71,7 +71,7 @@ class LifespanManager:
         """逆序关闭组件，记录全部关闭错误后继续清理。"""
         if not self._running:
             return
-        first_error: Exception | None = None
+        errors: list[Exception] = []
         for name in reversed(self._started):
             hook = self._stop_hooks.get(f"STOP.{name}")
             if hook is None:
@@ -81,12 +81,13 @@ class LifespanManager:
                 await self._invoke(hook)
             except Exception as error:  # noqa: BLE001
                 log.error("lifespan stop hook failed name={} type={}", name, type(error).__name__)  # noqa: TRY400
-                if first_error is None:
-                    first_error = error
+                errors.append(error)
         self._started.clear()
         self._running = False
-        if first_error is not None:
-            raise first_error
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise ExceptionGroup("多个生命周期关闭 hook 失败", errors)
 
     async def __aenter__(self) -> LifespanManager:
         """启动全部已注册组件。"""
