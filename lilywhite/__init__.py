@@ -5,6 +5,7 @@ from .config import AppProperties
 from .decorators.component import component
 from .decorators.configuration import bean, configuration
 from .decorators.controller import controller
+from .decorators.http import get, post, put, delete, patch
 from .decorators.repository import repository
 from .decorators.service import service
 from .decorators.websocket import websocket_controller
@@ -28,4 +29,10 @@ __all__ = [
     "run",
     "service",
     "websocket_controller",
+    # HTTP 方法
+    "get",
+    "post",
+    "put",
+    "delete",
+    "patch",
 ]

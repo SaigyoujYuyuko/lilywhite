@@ -5,7 +5,7 @@ import logging
 import pytest
 from litestar.testing import TestClient
 
-import lilywhite.app.main as main_module
+import lilywhite.app.boot as main_module
 from example.application import _time_greeting
 from lilywhite import LilyWhiteApplication, LilywhiteMain, override_logger, run
 from lilywhite.banner import render_banner
