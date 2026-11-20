@@ -9,8 +9,8 @@ from types import ModuleType
 from litestar import Controller
 from litestar.handlers.websocket_handlers import WebsocketListener
 
-from ..controller.registry import registered_controllers
-from ..controller.websocket import registered_websocket_controllers
+from ..decorators.controller import registered_controllers
+from ..decorators.websocket import registered_websocket_controllers
 from ..logger import LoggerManager
 from .ast_scan import StaticScanError, scan_decorated_classes
 
@@ -21,12 +21,12 @@ log = LoggerManager.get_logger("DI")
 type BackendSelection = str | tuple[str, ...]
 
 _DECORATOR_SOURCES = {
-    "controller": frozenset({"lilywhite", "lilywhite.controller", "lilywhite.controller.registry"}),
-    "websocket_controller": frozenset({"lilywhite", "lilywhite.controller.websocket"}),
-    "service": frozenset({"lilywhite", "lilywhite.services.registry"}),
-    "repository": frozenset({"lilywhite", "lilywhite.storage.registry"}),
-    "component": frozenset({"lilywhite", "lilywhite.utils.component"}),
-    "configuration": frozenset({"lilywhite", "lilywhite.utils.configuration"}),
+    "controller": frozenset({"lilywhite", "lilywhite.decorators.controller"}),
+    "websocket_controller": frozenset({"lilywhite", "lilywhite.decorators.websocket"}),
+    "service": frozenset({"lilywhite", "lilywhite.decorators.service"}),
+    "repository": frozenset({"lilywhite", "lilywhite.decorators.repository"}),
+    "component": frozenset({"lilywhite", "lilywhite.decorators.component"}),
+    "configuration": frozenset({"lilywhite", "lilywhite.decorators.configuration"}),
 }
 
 

@@ -1,8 +1,8 @@
 """服务健康状态查询用例。"""
 
+from ..decorators.service import service
 from ..health import HealthCenter, HealthResult
 from ..metrics import RequestMetrics, RequestMetricsResult
-from .registry import service
 from .result import ServiceResult, success
 
 

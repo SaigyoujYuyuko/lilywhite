@@ -37,7 +37,7 @@ def test_ast_scan_resolves_aliases_without_importing_business_modules(
             ),
             "logic/use_case.py": ("from lilywhite import service as s\n@s()\nclass UseCase:\n    pass\n"),
             "store/memory.py": (
-                "from lilywhite.storage.registry import repository as repo\n"
+                "from lilywhite.decorators.repository import repository as repo\n"
                 "class Contract:\n"
                 "    pass\n"
                 '@repo(Contract, backend="memory")\n'
@@ -53,7 +53,7 @@ def test_ast_scan_resolves_aliases_without_importing_business_modules(
                 "    pass\n"
             ),
             "nested/__init__.py": (
-                "from lilywhite.utils.component import component\n@component\nclass Resource:\n    pass\n"
+                "from lilywhite.decorators.component import component\n@component\nclass Resource:\n    pass\n"
             ),
             "nested/conditional.py": (
                 "from lilywhite import service\nif True:\n    @service\n    class Hidden:\n        pass\n"

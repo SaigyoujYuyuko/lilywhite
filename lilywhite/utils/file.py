@@ -6,7 +6,7 @@ from typing import Protocol
 
 import ayafileio
 
-from .component import component
+from ..decorators.component import component
 
 type FilePath = str | PathLike[str]
 type FileContent = bytes | bytearray | memoryview

@@ -1,1 +1,1 @@
-"""Repository Interface 与存储 Adapter 注册。"""
+"""Repository Interface 与存储 Adapter 契约。"""

@@ -11,13 +11,13 @@ from litestar.datastructures import State
 from litestar.di import Provide
 
 from ..config import AppProperties
+from ..decorators import component as component_registrations
+from ..decorators import configuration as configuration_registrations
+from ..decorators import repository as repository_registrations
+from ..decorators import service as service_registrations
+from ..decorators.configuration import BeanFactory
 from ..lifecycle import ManagedComponent, RequestScopedResource
 from ..logger import LoggerManager
-from ..services import registry as service_registrations
-from ..storage import registry as repository_registrations
-from ..utils import component as component_registrations
-from ..utils import configuration as configuration_registrations
-from ..utils.configuration import BeanFactory
 from ..utils.registry import LifetimeType
 from .discovery import BackendSelection, import_decorated_modules, import_package_modules, normalize_backends
 

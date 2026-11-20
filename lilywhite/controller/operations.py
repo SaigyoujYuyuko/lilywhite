@@ -8,10 +8,10 @@ from litestar.datastructures import State
 from litestar.di import NamedDependency
 from litestar.response.sse import ServerSentEvent
 
+from ..decorators.controller import controller
 from ..health import HealthStatusType
 from ..services.health import HealthService
 from ..services.log import LogService
-from .registry import controller
 from .result import HttpResult, JsonObject, log_stream, not_found, ok, too_many_requests, unauthorized
 
 

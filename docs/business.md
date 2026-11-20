@@ -6,6 +6,15 @@
 from lilywhite import component, controller, repository, service, websocket_controller
 ```
 
+框架自身的装饰器集中在 `lilywhite.decorators`，按职责分成 `controller`、`websocket`、`service`、`repository`、`component` 和 `configuration` 模块；`bean` 与 `configuration` 放在一起。需要按模块阅读或导入时使用：
+
+```python
+from lilywhite.decorators.controller import controller
+from lilywhite.decorators.service import service
+```
+
+这些类装饰器共享 `DecoratorRegistry`，它继承通用 `Registry`，负责全限定名注册和业务包过滤；日常业务代码继续使用顶层导入即可。
+
 LilyWhite 保留分层和构造器注入，但不生成代理类。Controller 调 Service，Service 依赖 Repository Interface，具体 Adapter 由启动时选择的后端决定。
 
 ## 目录可以自由命名
@@ -206,6 +215,49 @@ class EchoWebsocketController(WebsocketListener):
 ```
 
 它和 `@controller` 一样声明路径并随业务包发现，只不过处理 WebSocket 消息。连接 `ws://127.0.0.1:8000/ws/echo` 即可测试。
+
+## WebSocket 客户端
+
+`WebSocketClient` 用于相反的方向：让当前应用作为客户端，连接其他 WebSocket 服务端。异步上下文会负责连接和关闭：
+
+```python
+from lilywhite import WebSocketClient
+
+async with WebSocketClient("wss://example.com/ws") as client:
+    await client.send_text("春が来た")
+    reply = await client.receive_text(timeout=5)
+
+    await client.send_json({"type": "greeting", "name": "Lily"})
+    result = await client.receive_json(timeout=5)
+```
+
+提供的方法：
+
+- `send_text()`、`send_bytes()`、`send_json()` 发送消息；JSON 以文本帧发送。
+- `receive()` 返回原始的 `str | bytes`，`receive_text()` 和 `receive_bytes()` 会检查消息类型。
+- `receive_json()` 解码 JSON；传入 `msgspec.Struct` 等类型可得到 typed 结果，例如 `await client.receive_json(Greeting)`。
+- 所有接收方法都支持可选的 `timeout` 秒数。
+- `async for message in client` 持续接收消息，服务端正常关闭时自然结束；异常关闭会保留协议异常。
+- `is_open` 表示底层连接当前是否打开。
+
+需要跨整个应用持有长连接时，可以注册为 Bean：
+
+```python
+from lilywhite import WebSocketClient, bean, configuration
+
+@configuration
+class UpstreamConfiguration:
+    @bean
+    def upstream_socket(self) -> WebSocketClient:
+        return WebSocketClient(
+            "wss://example.com/ws",
+            headers={"Authorization": "Bearer <token>"},
+        )
+```
+
+`WebSocketClient` 实现了 `initialize()` 和 `close()`：应用启动时建立连接，连接失败会让启动直接报错，应用关闭时释放连接。之后其他 Service 可以通过构造器按 `WebSocketClient` 类型注入。
+
+一个实例代表一个连接。不要在同一实例上并发启动多个接收循环；临时任务则优先使用局部 `async with`，不为每个任务创建全局 Singleton。
 
 ## 托管组件
 

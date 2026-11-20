@@ -5,8 +5,8 @@ from collections.abc import Coroutine
 
 import msgspec
 
+from ..decorators.component import component
 from ..logger import LoggerManager
-from .component import component
 
 log = LoggerManager.get_logger("TASK")
 

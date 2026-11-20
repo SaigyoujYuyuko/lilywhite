@@ -3,7 +3,7 @@
 import time
 from typing import Protocol
 
-from .component import component
+from ..decorators.component import component
 
 
 class Clock(Protocol):

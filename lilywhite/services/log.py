@@ -3,8 +3,8 @@
 import secrets
 
 from ..config import AppProperties
+from ..decorators.service import service
 from ..observability import LogStream, LogSubscription, LogSubscriptionLimitException
-from .registry import service
 from .result import ServiceResult, success
 
 

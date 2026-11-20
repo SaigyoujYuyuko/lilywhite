@@ -3,7 +3,8 @@
 from collections.abc import Callable, Iterator
 from typing import Protocol, overload
 
-from .registry import Registry
+from ..utils.registry import Registry
+from .registry import DecoratorRegistry, qualified_name
 
 
 class BeanFactory(Protocol):
@@ -22,18 +23,18 @@ class BeanFactory(Protocol):
         ...
 
 
-configuration_registry: Registry[type[object]] = Registry()
+configuration_registry: DecoratorRegistry[type[object]] = DecoratorRegistry()
 bean_registry: Registry[BeanFactory] = Registry()
 
 
 def _type_key(target: type[object]) -> str:
     """保留完整模块路径，避免不同包的同名配置类冲突。"""
-    return f"{target.__module__}.{target.__qualname__}"
+    return qualified_name(target)
 
 
 def _factory_key(factory: BeanFactory) -> str:
     """保留工厂定义位置，支持不同类中的同名工厂方法。"""
-    return f"{factory.__module__}.{factory.__qualname__}"
+    return qualified_name(factory)
 
 
 @overload
@@ -48,7 +49,7 @@ def configuration[T](target: type[T] | None = None) -> type[T] | Callable[[type[
     """注册一组手动装配规则，不生成代理或修改配置类。"""
 
     def register(configuration_type: type[T]) -> type[T]:
-        configuration_registry.register("configuration", _type_key(configuration_type), configuration_type)
+        configuration_registry.register_type("configuration", configuration_type)
         return configuration_type
 
     return register if target is None else register(target)
@@ -74,13 +75,7 @@ def bean[F: BeanFactory](target: F | None = None) -> F | Callable[[F], F]:
 
 def registered_configurations(package_names: tuple[str, ...] | None = None) -> Iterator[type[object]]:
     """迭代指定包内的配置类，隔离其他应用的注册残留。"""
-    for configuration_type in configuration_registry.by_namespace("configuration"):
-        module = configuration_type.__module__
-        if package_names is not None and not any(
-            module == package or module.startswith(f"{package}.") for package in package_names
-        ):
-            continue
-        yield configuration_type
+    yield from configuration_registry.types_in_packages("configuration", package_names)
 
 
 def registered_bean_methods(configuration_type: type[object]) -> Iterator[BeanFactory]:

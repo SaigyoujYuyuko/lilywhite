@@ -2,14 +2,15 @@
 
 from .app import LilyWhiteApplication, LilywhiteMain, run
 from .config import AppProperties
-from .controller.registry import controller
-from .controller.websocket import websocket_controller
+from .decorators.component import component
+from .decorators.configuration import bean, configuration
+from .decorators.controller import controller
+from .decorators.repository import repository
+from .decorators.service import service
+from .decorators.websocket import websocket_controller
 from .logger import override_logger
-from .services.registry import service
-from .storage.registry import repository
-from .utils.component import component
-from .utils.configuration import bean, configuration
 from .utils.file import AyaFileIO, FileIO
+from .websocket import WebSocketClient
 
 __all__ = [
     "AppProperties",
@@ -17,6 +18,7 @@ __all__ = [
     "FileIO",
     "LilyWhiteApplication",
     "LilywhiteMain",
+    "WebSocketClient",
     "bean",
     "component",
     "configuration",

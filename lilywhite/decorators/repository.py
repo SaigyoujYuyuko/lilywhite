@@ -4,9 +4,10 @@ from collections.abc import Callable
 
 import msgspec
 
-from ..utils.registry import LifetimeType, Registry
+from ..utils.registry import LifetimeType
+from .registry import DecoratorRegistry
 
-repository_registry: Registry[type[object]] = Registry()
+repository_registry: DecoratorRegistry[type[object]] = DecoratorRegistry()
 
 
 class RepositoryRegistration(msgspec.Struct, frozen=True):
@@ -31,7 +32,7 @@ def repository[T](
 
     def register(implementation: type[T]) -> type[T]:
         """记录实现类型并保留原始类定义。"""
-        repository_registry.decorator(_namespace(interface, backend, lifetime))(implementation)
+        repository_registry.register_type(_namespace(interface, backend, lifetime), implementation)
         return implementation
 
     return register
@@ -47,11 +48,8 @@ def registered_repositories(
     return [
         RepositoryRegistration(implementation=implementation, lifetime=lifetime)
         for lifetime in LifetimeType
-        for implementation in repository_registry.by_namespace(_namespace(interface, backend, lifetime))
-        if package_names is None
-        or any(
-            implementation.__module__ == package or implementation.__module__.startswith(f"{package}.")
-            for package in package_names
+        for implementation in repository_registry.types_in_packages(
+            _namespace(interface, backend, lifetime), package_names
         )
     ]
 
