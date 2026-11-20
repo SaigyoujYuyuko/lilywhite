@@ -7,16 +7,16 @@ from litestar.testing import TestClient
 
 import lilywhite.app.boot as main_module
 from example.application import _time_greeting
+from example.properties import ExampleProperties
 from lilywhite import LilyWhiteApplication, LilywhiteMain, override_logger, run
 from lilywhite.banner import render_banner
-from lilywhite.config import AppProperties
 from lilywhite.logger import LoggerManager
 
 
 def test_greeting_uses_complete_dependency_injection_chain() -> None:
     """示例请求必须经过 Controller、Service 和内存 Repository。"""
     application = LilyWhiteApplication(
-        AppProperties(),
+        ExampleProperties(),
         business_package="example",
         application_name="LilyWhite Test",
     ).create_app()
@@ -26,6 +26,22 @@ def test_greeting_uses_complete_dependency_injection_chain() -> None:
 
     assert response.status_code == 200
     assert response.json()["body"]["message"] == "你好，Lily！lilywhite 模板已经运行。"
+
+
+def test_spring_greeting_can_be_enabled_by_configuration() -> None:
+    """春季配置应替换同一接口的默认问候实现，并保持路由可用。"""
+    properties = ExampleProperties().override(features={"spring_greeting": True})
+    application = LilyWhiteApplication(
+        properties,
+        business_package="example",
+        application_name="LilyWhite Spring Test",
+    ).create_app()
+
+    with TestClient(application) as client:
+        response = client.get("/api/v1/greetings/Lily")
+
+    assert response.status_code == 200
+    assert response.json()["body"]["message"] == "春が来た，Lily！LilyWhite 与你同在。"
 
 
 def test_main_marks_entry_and_injects_asgi_call() -> None:
@@ -82,7 +98,7 @@ def test_default_banner_includes_optional_entry_message(capsys: pytest.CaptureFi
         def banner_message(self) -> str:
             return "HAVE A NICE DAY"
 
-    main_module._print_entry_banner(MessageApplication, AppProperties(), entry=MessageApplication())
+    main_module._print_entry_banner(MessageApplication, ExampleProperties(), entry=MessageApplication())
 
     captured = capsys.readouterr()
     assert "Bringing Spring to Python." in captured.out
@@ -94,7 +110,7 @@ def test_default_banner_includes_optional_entry_message(capsys: pytest.CaptureFi
 def test_websocket_controller_receives_and_returns_messages() -> None:
     """WebSocket Controller 必须随业务包发现并完成真实消息收发。"""
     application = LilyWhiteApplication(
-        AppProperties(),
+        ExampleProperties(),
         business_package="example",
         application_name="LilyWhite WebSocket Test",
     ).create_app()
@@ -113,6 +129,8 @@ def test_custom_entry_banner_replaces_default(
 
     @LilywhiteMain
     class CustomBannerApplication:
+        properties_type = ExampleProperties
+
         def banner(self) -> str:
             return "CUSTOM SPRING BANNER"
 
@@ -143,7 +161,7 @@ def test_entry_shutdown_hook_runs_after_real_lifespan() -> None:
     entry = LifecycleApplication()
     application = main_module._create_application(
         LifecycleApplication,
-        AppProperties(),
+        ExampleProperties(),
         entry=entry,
     )
 
@@ -182,7 +200,7 @@ def test_entry_override_logger_accepts_standard_logger_instance() -> None:
     try:
         application = main_module._create_application(
             CustomLoggerApplication,
-            AppProperties(),
+            ExampleProperties(),
             entry=entry,
         )
         with TestClient(application):

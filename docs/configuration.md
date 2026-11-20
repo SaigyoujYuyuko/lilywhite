@@ -232,3 +232,20 @@ def ai_enabled(config: ProjectProperties) -> bool:
 - 禁用目标不会创建实例或注册生命周期。
 
 不要在 Bean 工厂里返回 `None` 表示禁用，也不要在模块顶层用 `if config...` 包住装饰器类。前者破坏类型约定，后者会把配置加载与模块导入顺序耦合起来。
+
+
+## 仓库示例的功能切换
+
+`example/properties.py` 定义了 `ExampleProperties`，入口类通过 `properties_type` 使用它。默认配置走内存问候实现：
+
+```powershell
+uv run python -m example --config config.example.yaml
+```
+
+切换为春季问候实现：
+
+```powershell
+uv run python -m example --config config.spring.example.yaml
+```
+
+然后请求 `http://127.0.0.1:8000/api/v1/greetings/Lily`。`example/store/memory/greeting.py` 使用谓词排除春季模式，`example/store/spring/greeting.py` 使用 `@enabled("features.spring_greeting")` 启用，两个实现不会同时竞争同一个 Repository Interface。

@@ -5,6 +5,8 @@ from datetime import datetime
 from lilywhite import LilywhiteMain
 from lilywhite.logger import LoggerManager
 
+from .properties import ExampleProperties
+
 log = LoggerManager.get_logger("EXAMPLE")
 
 
@@ -23,10 +25,11 @@ def _time_greeting(hour: int) -> str:
 
 @LilywhiteMain
 class ExampleApplication:
-    """声明示例元数据、默认后端和业务生命周期钩子。"""
+    """声明示例元数据、业务配置类型和生命周期钩子。"""
 
     application_name = "LilyWhite Greeting Example"
     application_version = "0.5.0"
+    properties_type = ExampleProperties
 
     # def banner(self) -> str:
     #     """用自定义彩色字符画覆盖框架默认 Banner。"""

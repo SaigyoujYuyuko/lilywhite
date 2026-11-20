@@ -34,3 +34,7 @@ operations:
   # GET /logs/stream 的独立运维 Token；null 关闭日志流。
   # 使用至少 32 个 ASCII 字符的随机值，只写入本地 config.yaml。
   log_access_token: null
+
+features:
+  # false 使用默认内存问候；true 切换为春季问候实现。
+  spring_greeting: false

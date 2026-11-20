@@ -1,0 +1,6 @@
+# 春季问候示例：python -m example --config config.spring.example.yaml
+# 未写出的 server、logging 和 operations 使用框架默认值。
+version: 1
+
+features:
+  spring_greeting: true
