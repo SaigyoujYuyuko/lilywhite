@@ -240,6 +240,66 @@ class RedisCacheComponent:
 
 Component 可以注入 Service 或其他组件；需要暴露给 HTTP 参数注入的业务用例则应使用 `@service`。
 
+框架或扩展可以用 `@component(interface=SomeInterface, fallback=True)` 声明后备实现。普通组件和 Bean 先绑定，后备实现只在该接口仍没有绑定时补位；业务提供替换实现时不需要加 `fallback=True`。
+
+## 文件组件
+
+框架内置 `FileIO`，默认适配器 `AyaFileIO` 使用 AyaFileIO 的 IOCP、io_uring 或 Dispatch I/O 后端。组件本身是无状态 Singleton，每次文件操作都会独立打开并关闭句柄；不要把某个已打开的文件句柄注册成应用级 Singleton。
+
+业务 Service 直接声明 `FileIO` 即可获得默认实现：
+
+```python
+from pathlib import Path
+from lilywhite import FileIO, service
+
+@service
+class ReportService:
+    def __init__(self, file_io: FileIO) -> None:
+        self._file_io = file_io
+
+    async def load(self) -> str:
+        return await self._file_io.read_text(Path("data/report.txt"))
+```
+
+整文件读写和复制的写法：
+
+```python
+text = await file_io.read_text(path)
+count = await file_io.write_text(path, "春が来た！")
+
+data = await file_io.read_bytes(path)
+count = await file_io.write_bytes(path, data)
+count = await file_io.copy(source, destination)
+```
+
+`read_bytes()` 和 `stream()` 也支持 `offset` 与 `size`，可用于文件范围和 Range 响应。`stream()` 每次产生独立的 `bytes`，不需要处理 AyaFileIO 复用缓冲区的生命周期：
+
+```python
+async for chunk in file_io.stream(path, offset=1024, size=65536):
+    await send_chunk(chunk)
+```
+
+上传等异步输入可以交给 `write_stream()`，不需要先拼成一个大型 `bytes`：
+
+```python
+count = await file_io.write_stream(path, upload_chunks)
+```
+
+字节和文本写入都会处理短写。`write_text()` 返回字符数，其他二进制写入返回字节数。文件访问权限、允许的路径范围和文件名校验仍属于业务层，不要直接把用户输入拼成文件系统路径。
+
+需要换成自己的存储实现时，注册同接口的普通组件即可，内置实现会退出：
+
+```python
+from lilywhite import FileIO, component
+
+@component(interface=FileIO)
+class OSSFileIO:
+    # 在这里实现 FileIO 声明的方法。
+    ...
+```
+
+返回 `FileIO` 的 `@bean` 和运行时 `resources={FileIO: instance}` 也能替换默认实现。
+
 ## 配置类与工厂 Bean
 
 `@component` 适合大多数“给框架一个类，让框架按构造器创建”的场景。需要调用第三方工厂，或者希望通过一段明确的 Python 逻辑创建对象时，再使用 `@configuration` 和 `@bean`：

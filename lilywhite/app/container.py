@@ -419,7 +419,7 @@ def create_container(
     business_package: str | None = None,
     resources: Mapping[type[object], object] | None = None,
 ) -> DependencyContainer:
-    """自动收集框架与业务装饰器，构造限定包边界的依赖图。"""
+    """自动收集装饰器，按普通组件、Bean、后备组件的顺序构造依赖图。"""
     enabled_backends = normalize_backends(backends)
     package_names = ("lilywhite",) if business_package is None else ("lilywhite", business_package)
     log.debug(
@@ -434,12 +434,12 @@ def create_container(
 
     properties = properties or AppProperties()
     container = DependencyContainer(enabled_backends, package_names=package_names)
-    for component_registration in component_registrations.registered_components(package_names):
-        container.register_component(
-            component_registration.interface,
-            component_registration.implementation,
-            component_registration.lifetime,
-        )
+    registrations = tuple(component_registrations.registered_components(package_names))
+    for registration in registrations:
+        if not registration.fallback:
+            container.register_component(
+                registration.interface, registration.implementation, registration.lifetime
+            )
     for configuration_type in configuration_registrations.registered_configurations(package_names):
         try:
             configuration = configuration_type()
@@ -449,6 +449,19 @@ def create_container(
             ) from error
         for factory in configuration_registrations.registered_bean_methods(configuration_type):
             container.register_bean(configuration, factory)
+    for registration in registrations:
+        if not registration.fallback:
+            continue
+        if registration.interface in container._lifetimes:
+            log.debug(
+                "component fallback skipped interface={} implementation={}",
+                _type_name(registration.interface),
+                _type_name(registration.implementation),
+            )
+            continue
+        container.register_component(
+            registration.interface, registration.implementation, registration.lifetime
+        )
     container.register_instance(AppProperties, properties)
     for target, instance in (resources or {}).items():
         container.register_instance(target, instance)

@@ -11,11 +11,12 @@ component_registry: dict[str, ComponentRegistration] = {}
 
 
 class ComponentRegistration(msgspec.Struct, frozen=True):
-    """组件公开类型、实现类型与生命周期。"""
+    """组件公开类型、实现类型、生命周期和后备标记。"""
 
     interface: type[object]
     implementation: type[object]
     lifetime: LifetimeType
+    fallback: bool = False
 
 
 def _namespace(interface: type[object], implementation: type[object], lifetime: LifetimeType) -> str:
@@ -32,6 +33,7 @@ def component[T](
     *,
     interface: type[object] | None = None,
     lifetime: LifetimeType = LifetimeType.SINGLETON,
+    fallback: bool = False,
 ) -> type[T]: ...
 
 
@@ -41,6 +43,7 @@ def component[T](
     *,
     interface: type[object] | None = None,
     lifetime: LifetimeType = LifetimeType.SINGLETON,
+    fallback: bool = False,
 ) -> Callable[[type[T]], type[T]]: ...
 
 
@@ -49,13 +52,14 @@ def component[T](
     *,
     interface: type[object] | None = None,
     lifetime: LifetimeType = LifetimeType.SINGLETON,
+    fallback: bool = False,
 ) -> type[T] | Callable[[type[T]], type[T]]:
-    """注册基础设施组件；默认以自身类型公开，不暴露给Controller。"""
+    """注册基础设施组件；fallback 实现只在同接口没有其他绑定时补位。"""
 
     def register(implementation: type[T]) -> type[T]:
         """记录组件类型而不创建实例。"""
         public_type = interface or implementation
-        registration = ComponentRegistration(public_type, implementation, lifetime)
+        registration = ComponentRegistration(public_type, implementation, lifetime, fallback)
         component_registry[_namespace(public_type, implementation, lifetime)] = registration
         return implementation
 

@@ -9,9 +9,12 @@ from .services.registry import service
 from .storage.registry import repository
 from .utils.component import component
 from .utils.configuration import bean, configuration
+from .utils.file import AyaFileIO, FileIO
 
 __all__ = [
     "AppProperties",
+    "AyaFileIO",
+    "FileIO",
     "LilyWhiteApplication",
     "LilywhiteMain",
     "bean",
