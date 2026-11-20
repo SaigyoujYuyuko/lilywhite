@@ -5,6 +5,7 @@ from typing import overload
 
 import msgspec
 
+from ..qualifier import qualifier_name
 from ..utils.registry import LifetimeType, Registry
 from .registry import module_in_packages
 
@@ -12,12 +13,13 @@ component_registry: Registry[ComponentRegistration] = Registry()
 
 
 class ComponentRegistration(msgspec.Struct, frozen=True):
-    """组件公开类型、实现类型、生命周期和后备标记。"""
+    """组件公开类型、实现类型、生命周期、后备标记和可选限定名。"""
 
     interface: type[object]
     implementation: type[object]
     lifetime: LifetimeType
     fallback: bool = False
+    qualifier: str | None = None
 
     @property
     def __name__(self) -> str:  # pyright: ignore[reportIncompatibleVariableOverride]
@@ -25,11 +27,16 @@ class ComponentRegistration(msgspec.Struct, frozen=True):
         return self.implementation.__name__
 
 
-def _namespace(interface: type[object], implementation: type[object], lifetime: LifetimeType) -> str:
-    """按接口、实现和生命周期隔离组件注册。"""
+def _namespace(
+    interface: type[object],
+    implementation: type[object],
+    lifetime: LifetimeType,
+    qualifier: str | None,
+) -> str:
+    """按接口、实现、生命周期和限定名隔离组件注册。"""
     return (
         f"{interface.__module__}.{interface.__qualname__}:"
-        f"{implementation.__module__}.{implementation.__qualname__}:{lifetime.value}"
+        f"{implementation.__module__}.{implementation.__qualname__}:{lifetime.value}:{qualifier or ''}"
     )
 
 
@@ -40,6 +47,7 @@ def component[T](
     interface: type[object] | None = None,
     lifetime: LifetimeType = LifetimeType.SINGLETON,
     fallback: bool = False,
+    name: str | None = None,
 ) -> type[T]: ...
 
 
@@ -50,6 +58,7 @@ def component[T](
     interface: type[object] | None = None,
     lifetime: LifetimeType = LifetimeType.SINGLETON,
     fallback: bool = False,
+    name: str | None = None,
 ) -> Callable[[type[T]], type[T]]: ...
 
 
@@ -59,15 +68,17 @@ def component[T](
     interface: type[object] | None = None,
     lifetime: LifetimeType = LifetimeType.SINGLETON,
     fallback: bool = False,
+    name: str | None = None,
 ) -> type[T] | Callable[[type[T]], type[T]]:
-    """注册基础设施组件；fallback 实现只在同接口没有其他绑定时补位。"""
+    """注册基础设施组件；fallback 实现只在同接口同限定名没有其他绑定时补位。"""
+    qualifier = qualifier_name(name)
 
     def register(implementation: type[T]) -> type[T]:
         """记录组件类型而不创建实例。"""
         public_type = interface or implementation
-        registration = ComponentRegistration(public_type, implementation, lifetime, fallback)
+        registration = ComponentRegistration(public_type, implementation, lifetime, fallback, qualifier)
         component_registry.register(
-            "component", _namespace(public_type, implementation, lifetime), registration
+            "component", _namespace(public_type, implementation, lifetime, qualifier), registration
         )
         return implementation
 

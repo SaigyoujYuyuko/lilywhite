@@ -52,6 +52,7 @@ uv run python -m my_app
 - [快速上手：第一个接口与仓库示例](docs/getting-started.md)
 - [入口、Banner、生命周期与 ASGI](docs/application.md)
 - [Controller、Service、Repository 与依赖注入](docs/business.md)
+- [多数据库、多客户端与 Qualifier](docs/qualifier.md)
 - [YAML 与声明式配置](docs/configuration.md)
 - [健康检查、指标、日志流与响应格式](docs/operations.md)
 - [文档导航与仓库结构](docs/index.md)

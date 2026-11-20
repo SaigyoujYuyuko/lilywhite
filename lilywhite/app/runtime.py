@@ -7,7 +7,7 @@ from ..health import HealthCenter
 from ..lifecycle import ManagedComponent
 from ..metrics import RequestMetrics
 from ..observability import LogStream
-from .container import create_container, dependency_name
+from .container import create_container
 from .lifespan import LifespanManager
 
 
@@ -39,12 +39,11 @@ class ApplicationRuntime:
         self.lifespan = LifespanManager()
         self.lifespan.register("health", "START")(self.health_center.start)
         self.lifespan.register("health", "STOP")(self.health_center.stop)
-        for component in self.container.managed_components():
-            self._register_component(component)
+        for name, component in self.container.managed_component_registrations():
+            self._register_component(name, component)
 
-    def _register_component(self, component: ManagedComponent) -> None:
-        """按组件类型注册启动、关闭和健康状态。"""
-        name = dependency_name(type(component))
+    def _register_component(self, name: str, component: ManagedComponent) -> None:
+        """按包含限定名的组件名称注册启动、关闭和健康状态。"""
         self.lifespan.register(name, "START")(lambda: self._start_component(name, component))
         self.lifespan.register(name, "STOP")(lambda: self._stop_component(name, component))
 

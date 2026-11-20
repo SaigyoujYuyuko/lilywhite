@@ -4,34 +4,43 @@ from collections.abc import Callable
 
 import msgspec
 
-from ..utils.registry import LifetimeType
-from .registry import DecoratorRegistry
+from ..qualifier import qualifier_name
+from ..utils.registry import LifetimeType, Registry
+from .registry import module_in_packages, qualified_name
 
-repository_registry: DecoratorRegistry[type[object]] = DecoratorRegistry()
+repository_registry: Registry[RepositoryRegistration] = Registry()
 
 
 class RepositoryRegistration(msgspec.Struct, frozen=True):
-    """Repository 实现类型及其生命周期。"""
+    """Repository 接口、实现类型、生命周期和可选限定名。"""
 
+    interface: type[object]
     implementation: type[object]
     lifetime: LifetimeType
+    qualifier: str | None = None
 
-
-def _namespace(interface: type[object], lifetime: LifetimeType) -> str:
-    """生成按 Interface 和生命周期隔离的命名空间。"""
-    return f"{interface.__module__}.{interface.__qualname__}:{lifetime.value}"
+    @property
+    def __name__(self) -> str:  # pyright: ignore[reportIncompatibleVariableOverride]
+        """让通用 Registry 能把这条元数据记录视为命名对象。"""
+        return self.implementation.__name__
 
 
 def repository[T](
     interface: type[object],
     *,
     lifetime: LifetimeType = LifetimeType.SINGLETON,
+    name: str | None = None,
 ) -> Callable[[type[T]], type[T]]:
     """把存储实现注册为指定 Interface 的候选实现。"""
+    qualifier = qualifier_name(name)
 
     def register(implementation: type[T]) -> type[T]:
         """记录实现类型并保留原始类定义。"""
-        repository_registry.register_type(_namespace(interface, lifetime), implementation)
+        registration = RepositoryRegistration(interface, implementation, lifetime, qualifier)
+        key = (
+            f"{qualified_name(interface)}:{qualified_name(implementation)}:{lifetime.value}:{qualifier or ''}"
+        )
+        repository_registry.register("repository", key, registration)
         return implementation
 
     return register
@@ -44,11 +53,10 @@ def registered_repositories(
 ) -> list[RepositoryRegistration]:
     """返回指定包内 Interface 的全部候选实现及生命周期。"""
     return [
-        RepositoryRegistration(implementation=implementation, lifetime=lifetime)
-        for lifetime in LifetimeType
-        for implementation in repository_registry.types_in_packages(
-            _namespace(interface, lifetime), package_names
-        )
+        registration
+        for registration in repository_registry.by_namespace("repository")
+        if registration.interface is interface
+        and module_in_packages(registration.implementation.__module__, package_names)
     ]
 
 

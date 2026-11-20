@@ -176,7 +176,7 @@ class MySQLGreetingRepository:
 
 `storage.engine` 是来自实际 `AppProperties` 子类的业务配置。静态扫描只负责发现装饰器模块，条件会在配置加载后、依赖绑定前执行；不要求 Adapter 的目录名具有特殊含义。
 
-同一个 Interface 必须恰好有一个启用的实现。没有实现或存在多个启用实现时，容器都会在启动阶段给出明确错误。
+不写限定名时，同一个 Interface 必须恰好有一个启用的实现。需要多个实现同时存在时，给 `@repository` 加 `name`，再在注入点使用 `Annotated[Interface, Qualifier("name")]`；完整示例见[多实例与 Qualifier](qualifier.md)。没有匹配实现或存在无法确定的候选时，容器会给出明确错误。
 
 Repository 也支持生命周期：
 
@@ -363,13 +363,13 @@ class BusinessConfiguration:
         )
 ```
 
-配置类构造器必须无参数。依赖写在 `@bean` 方法参数上，容器按参数类型注入；返回类型就是 Bean 的注册类型。上面的 `engine` 会得到由第一个方法创建的 `Settings`。
+配置类构造器必须无参数。依赖写在 `@bean` 方法参数上，容器按参数类型注入；返回类型就是 Bean 的注册类型。上面的 `engine` 会得到由第一个方法创建的 `Settings`。需要多个同类型 Bean 时，使用 `@bean(name="...")` 和 `Qualifier`，见[多实例与 Qualifier](qualifier.md)。
 
-第一版遵循这些规则：
+工厂 Bean 遵循这些规则：
 
-- 工厂方法使用同步函数，支持 `@bean` 和 `@bean()`。
+- 工厂方法使用同步函数，支持 `@bean`、`@bean()` 和 `@bean(name="...")`。
 - Bean 是应用级 Singleton，启动阶段完成依赖图检查并预创建。
-- 同一返回类型只能注册一次，不与 Component、Service 或其他 Bean 隐式竞争。
+- 同一返回类型和限定名的组合只能注册一次，不与 Component、Service 或其他 Bean 隐式竞争。
 - 返回值实现 `initialize()` / `close()` 时，同样进入托管组件生命周期。
 - 不要给同一个类同时加 `@component` 或用 `@bean` 再注册一次，选择一种装配方式即可。
 
@@ -380,7 +380,7 @@ class BusinessConfiguration:
 启动构造依赖图时，会检查：
 
 - 构造器依赖是否已注册。
-- Repository Interface 是否恰好有一个已启用的实现。
+- Repository Interface 是否有唯一候选，或是否通过 Qualifier 选出了唯一实现。
 - 是否存在循环依赖。
 - Singleton 是否捕获了较短生命周期的依赖。
 - Singleton 组件的创建是否成功。

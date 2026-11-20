@@ -11,6 +11,7 @@ from .decorators.repository import repository
 from .decorators.service import service
 from .decorators.websocket import websocket_controller
 from .logger import override_logger
+from .qualifier import Qualifier
 from .utils.file import AyaFileIO, FileIO
 from .websocket import WebSocketClient
 
@@ -20,6 +21,7 @@ __all__ = [
     "FileIO",
     "LilyWhiteApplication",
     "LilywhiteMain",
+    "Qualifier",
     "WebSocketClient",
     "bean",
     "component",
