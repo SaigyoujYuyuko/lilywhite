@@ -99,7 +99,7 @@ def test_conditional_beans_services_and_repositories(
         "@configuration\n"
         "class FeatureConfiguration:\n"
         "    @bean\n"
-        "    @enabled(lambda config: config.features.ai)\n"
+        "    @enabled('features.ai')\n"
         "    def enabled_bean(self) -> EnabledBean:\n"
         "        return EnabledBean()\n"
         "    @enabled(lambda config: config.features.cache)\n"
@@ -121,7 +121,7 @@ def test_conditional_beans_services_and_repositories(
         "@enabled(lambda config: config.features.cache)\n"
         "class DisabledRepository:\n    pass\n"
         "@repository(Contract)\n"
-        "@enabled(lambda config: config.features.ai)\n"
+        "@enabled('features.ai')\n"
         "class EnabledRepository:\n    pass\n",
     )
 
@@ -183,4 +183,31 @@ def test_condition_rejects_http_and_websocket_controllers() -> None:
 
         @enabled(lambda _config: True)
         class ConditionalWebsocket(WebsocketListener):
+            pass
+
+
+def test_condition_path_rejects_missing_and_non_boolean_values() -> None:
+    """路径条件必须存在并指向 bool，空路径应在声明时拒绝。"""
+
+    class TextFeatureProperties(AppProperties):
+        features = section(name="Lily")
+
+    @enabled("features.name")
+    class NonBooleanTarget:
+        pass
+
+    with pytest.raises(TypeError, match=r"features\.name"):
+        condition_enabled(NonBooleanTarget, TextFeatureProperties())
+
+    @enabled("features.missing")
+    class MissingPathTarget:
+        pass
+
+    with pytest.raises(ValueError, match=r"features\.missing"):
+        condition_enabled(MissingPathTarget, FeatureProperties())
+
+    with pytest.raises(ValueError, match="配置路径"):
+
+        @enabled("")
+        class EmptyPathTarget:
             pass

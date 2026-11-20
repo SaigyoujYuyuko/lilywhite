@@ -191,18 +191,22 @@ features:
 
 ## 条件装配
 
-`@enabled()` 接收一个返回 `bool` 的条件。条件在容器装配时执行，参数是实际加载的配置对象；未声明条件的目标始终启用。
+`@enabled()` 接收点分配置路径或返回 `bool` 的谓词。条件在容器装配时执行，使用实际加载的配置对象；未声明条件的目标始终启用。
+
+简单布尔开关直接写配置路径：
 
 ```python
 from lilywhite import bean, configuration, enabled
 
 @configuration
-@enabled(lambda config: config.features.ai)
+@enabled("features.ai")
 class AIConfiguration:
     @bean
     def ai_client(self) -> AIClient:
         return AIClient()
 ```
+
+路径按 `.` 读取嵌套分组，必须指向 `bool` 值。路径不存在或值不是布尔类型时，启动会给出明确错误；不会执行字符串表达式，也不会把文本 `"false"` 当成布尔开关。
 
 条件可以放在配置类、单个 Bean、Component、Service 或 Repository 上。Controller 和 WebSocket Controller 不参与条件装配，误用 `@enabled` 会直接抛出 `TypeError`。多个条件需要组合时直接写 Python 表达式：
 
