@@ -68,6 +68,16 @@ def test_bean_dependencies_are_singletons_and_managed_components() -> None:
     assert list(container.managed_components()) == [engine]
 
 
+def test_bound_bean_method_does_not_receive_configuration_twice() -> None:
+    """直接注册绑定方法时，self 只能由方法描述符提供一次。"""
+    container = DependencyContainer("memory")
+    configuration = DatabaseConfiguration()
+    container.register_bean(configuration, configuration.engine)
+    container.build()
+
+    assert container.resolve(Engine).url == "memory://local"
+
+
 def test_duplicate_bean_return_type_is_rejected() -> None:
     """同一返回类型不能由两个工厂隐式竞争。"""
 

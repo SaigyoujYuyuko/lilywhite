@@ -26,7 +26,7 @@ class ExampleApplication:
     """声明示例元数据、默认后端和业务生命周期钩子。"""
 
     application_name = "LilyWhite Greeting Example"
-    application_version = "0.4.0"
+    application_version = "0.4.1"
     backends = ("memory",)
 
     # def banner(self) -> str:

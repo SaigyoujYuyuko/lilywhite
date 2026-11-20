@@ -1,12 +1,29 @@
 """配置类与同步工厂 Bean 的显式注册装饰器。"""
 
 from collections.abc import Callable, Iterator
-from typing import overload
+from typing import Protocol, overload
 
 from .registry import Registry
 
+
+class BeanFactory(Protocol):
+    """普通函数和绑定方法都支持的工厂方法协议。"""
+
+    __name__: str
+    __module__: str
+    __qualname__: str
+
+    def __call__(self, *args: object, **kwargs: object) -> object:
+        """接受容器解析后的依赖并创建 Bean。"""
+        ...
+
+    def __get__(self, instance: object, owner: type[object] | None = None) -> BeanFactory:
+        """把未绑定函数绑定到配置类实例；绑定方法保持原绑定关系。"""
+        ...
+
+
 configuration_registry: Registry[type[object]] = Registry()
-bean_registry: Registry[Callable[..., object]] = Registry()
+bean_registry: Registry[BeanFactory] = Registry()
 
 
 def _type_key(target: type[object]) -> str:
@@ -14,7 +31,7 @@ def _type_key(target: type[object]) -> str:
     return f"{target.__module__}.{target.__qualname__}"
 
 
-def _factory_key(factory: Callable[..., object]) -> str:
+def _factory_key(factory: BeanFactory) -> str:
     """保留工厂定义位置，支持不同类中的同名工厂方法。"""
     return f"{factory.__module__}.{factory.__qualname__}"
 
@@ -38,14 +55,14 @@ def configuration[T](target: type[T] | None = None) -> type[T] | Callable[[type[
 
 
 @overload
-def bean[F: Callable[..., object]](target: F) -> F: ...
+def bean[F: BeanFactory](target: F) -> F: ...
 
 
 @overload
-def bean[F: Callable[..., object]](target: None = None) -> Callable[[F], F]: ...
+def bean[F: BeanFactory](target: None = None) -> Callable[[F], F]: ...
 
 
-def bean[F: Callable[..., object]](target: F | None = None) -> F | Callable[[F], F]:
+def bean[F: BeanFactory](target: F | None = None) -> F | Callable[[F], F]:
     """把普通方法标记为 Bean 工厂，返回值类型由容器在装配时读取。"""
 
     def register(factory: F) -> F:
@@ -66,7 +83,7 @@ def registered_configurations(package_names: tuple[str, ...] | None = None) -> I
         yield configuration_type
 
 
-def registered_bean_methods(configuration_type: type[object]) -> Iterator[Callable[..., object]]:
+def registered_bean_methods(configuration_type: type[object]) -> Iterator[BeanFactory]:
     """按注册顺序返回当前配置类显式标记的工厂方法。"""
     prefix = f"{_type_key(configuration_type)}."
     for factory in bean_registry.by_namespace("bean"):
@@ -75,6 +92,7 @@ def registered_bean_methods(configuration_type: type[object]) -> Iterator[Callab
 
 
 __all__ = [
+    "BeanFactory",
     "bean",
     "bean_registry",
     "configuration",

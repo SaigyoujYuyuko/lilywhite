@@ -17,6 +17,7 @@ from ..services import registry as service_registrations
 from ..storage import registry as repository_registrations
 from ..utils import component as component_registrations
 from ..utils import configuration as configuration_registrations
+from ..utils.configuration import BeanFactory
 from ..utils.registry import LifetimeType
 from .discovery import BackendSelection, import_decorated_modules, import_package_modules, normalize_backends
 
@@ -32,10 +33,9 @@ class _Constructor(Protocol):
 
 
 class _BeanRegistration(msgspec.Struct, frozen=True):
-    """一个配置类实例及其同步工厂方法。"""
+    """一个已经绑定配置类实例的同步工厂方法。"""
 
-    configuration: object
-    factory: Callable[..., object]
+    factory: BeanFactory
     dependencies: list[tuple[str, type[object]]]
 
 
@@ -165,7 +165,7 @@ class DependencyContainer:
         self._lifetimes[interface] = lifetime
         self._implementations[interface] = implementation
 
-    def register_bean(self, configuration: object, factory: Callable[..., object]) -> None:
+    def register_bean(self, configuration: object, factory: BeanFactory) -> None:
         """注册配置类中的同步工厂方法及其返回类型。"""
         if iscoroutinefunction(factory):
             raise DependencyInjectionException(f"Bean 工厂必须是同步方法：{factory.__qualname__}")
@@ -175,7 +175,8 @@ class DependencyContainer:
         if return_type in self._lifetimes or return_type in self._beans:
             raise DependencyInjectionException(f"Bean 重复注册：{_type_name(return_type)}")
         dependencies = self._bean_dependencies(factory)
-        self._beans[return_type] = _BeanRegistration(configuration, factory, dependencies)
+        bound_factory = factory.__get__(configuration, type(configuration))
+        self._beans[return_type] = _BeanRegistration(bound_factory, dependencies)
         self._lifetimes[return_type] = LifetimeType.SINGLETON
         self._implementations[return_type] = return_type
         log.debug(
@@ -359,7 +360,7 @@ class DependencyContainer:
 
         bean = self._beans.get(target)
         if bean is not None:
-            return bean.factory(bean.configuration, **arguments)
+            return bean.factory(**arguments)
         factory = cast(_Constructor, implementation)
         return factory(**arguments)
 
@@ -371,7 +372,7 @@ class DependencyContainer:
         return self._constructor_dependencies(self._implementations[target])
 
     @staticmethod
-    def _bean_dependencies(factory: Callable[..., object]) -> list[tuple[str, type[object]]]:
+    def _bean_dependencies(factory: BeanFactory) -> list[tuple[str, type[object]]]:
         """读取工厂方法参数，self 由所属配置类实例提供。"""
         hints = get_type_hints(factory)
         dependencies: list[tuple[str, type[object]]] = []
