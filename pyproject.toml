@@ -64,6 +64,7 @@ ignore = ["PLE1205", "RUF001", "RUF002", "RUF003", "PLR2004", "TRY003", "TRY004"
 "lilywhite/__init__.py" = ["I001", "RUF022"]
 "lilywhite/app/__init__.py" = ["I001"]
 "lilywhite/decorators/http.py" = ["I001", "RUF022"]
+"lilywhite/decorators/conditional.py" = ["ANN401"]
 
 [tool.ruff.lint.pylint]
 max-args = 10

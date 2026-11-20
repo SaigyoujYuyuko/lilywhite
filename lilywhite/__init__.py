@@ -4,6 +4,7 @@ from .app import LilyWhiteApplication, LilywhiteMain, run
 from .config import AppProperties
 from .decorators.component import component
 from .decorators.configuration import bean, configuration
+from .decorators.conditional import enabled
 from .decorators.controller import controller
 from .decorators.http import get, post, put, delete, patch
 from .decorators.repository import repository
@@ -24,6 +25,7 @@ __all__ = [
     "component",
     "configuration",
     "controller",
+    "enabled",
     "override_logger",
     "repository",
     "run",

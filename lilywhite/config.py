@@ -5,7 +5,7 @@ from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
 from types import UnionType
-from typing import Any, ClassVar, cast, get_args, get_origin
+from typing import Any, ClassVar, cast, get_args, get_origin, overload
 from urllib.parse import urlsplit
 
 import yaml
@@ -165,10 +165,12 @@ class Config:
     __config_validators__: ClassVar[list[tuple[str, Validator]]] = []
 
     def __init__(self) -> None:
-        for name, value in vars(type(self)).items():
-            if name.startswith("_") or callable(value):
-                continue
-            self.__dict__[name] = deepcopy(value)
+        # 从基类到子类复制声明，让 AppProperties 子类保留框架配置分组。
+        for base in reversed(type(self).__mro__):
+            for name, value in vars(base).items():
+                if name.startswith("_") or callable(value):
+                    continue
+                self.__dict__[name] = deepcopy(value)
         self._validate()
 
     def _apply(self, changes: Mapping[str, Any], base_dir: Path | None = None) -> None:
@@ -179,7 +181,7 @@ class Config:
                 if not isinstance(value, Mapping):
                     raise TypeError(f"配置分组 {name} 必须使用映射")
                 current._update(value, base_dir)
-            elif name in vars(type(self)):
+            elif name in self.__dict__:
                 expected = type(current)
                 if not _matches_type(value, expected):
                     raise TypeError(f"配置项 {name} 类型不匹配")
@@ -289,12 +291,19 @@ class ConfigLoader:
     def __init__(self, path: Path) -> None:
         self._path = path.resolve()
 
-    def load(self) -> AppProperties:
-        """加载默认配置、YAML 覆盖和规范化值。"""
+    @overload
+    def load(self) -> AppProperties: ...
+
+    @overload
+    def load[T: AppProperties](self, properties_type: type[T]) -> T: ...
+
+    def load(self, properties_type: type[AppProperties] | None = None) -> AppProperties:
+        """按指定配置类型加载 YAML；省略时使用 AppProperties。"""
         raw: object = yaml.safe_load(self._path.read_text(encoding="utf-8")) or {}
         if not isinstance(raw, Mapping):
             raise TypeError("配置文件顶层必须是映射")
-        properties = AppProperties()
+        target_type = AppProperties if properties_type is None else properties_type
+        properties = target_type()
         properties._apply(raw, self._path.parent)
         return properties.override(
             server={"cors": {"allow_origins": _normalize_origins(properties.server.cors.allow_origins)}},

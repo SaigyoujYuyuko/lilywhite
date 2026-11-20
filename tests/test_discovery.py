@@ -8,7 +8,7 @@ from litestar.testing import TestClient
 
 from lilywhite import LilyWhiteApplication
 from lilywhite.app.ast_scan import scan_decorated_classes
-from lilywhite.app.discovery import StaticDiscoveryError, scan_decorated_modules
+from lilywhite.app.discovery import scan_decorated_modules
 from lilywhite.config import AppProperties
 
 
@@ -40,7 +40,7 @@ def test_ast_scan_resolves_aliases_without_importing_business_modules(
                 "from lilywhite.decorators.repository import repository as repo\n"
                 "class Contract:\n"
                 "    pass\n"
-                '@repo(Contract, backend="memory")\n'
+                "@repo(Contract)\n"
                 "class Memory:\n"
                 "    pass\n"
             ),
@@ -48,7 +48,7 @@ def test_ast_scan_resolves_aliases_without_importing_business_modules(
                 "from lilywhite import repository\n"
                 "class Contract:\n"
                 "    pass\n"
-                '@repository(Contract, backend="mysql")\n'
+                "@repository(Contract)\n"
                 "class MySQL:\n"
                 "    pass\n"
             ),
@@ -71,7 +71,7 @@ def test_ast_scan_resolves_aliases_without_importing_business_modules(
     )
     monkeypatch.syspath_prepend(str(tmp_path))
 
-    modules = scan_decorated_modules(package, backends=("memory",))
+    modules = scan_decorated_modules(package)
 
     assert modules == (
         f"{package}.http.routes",
@@ -79,6 +79,7 @@ def test_ast_scan_resolves_aliases_without_importing_business_modules(
         f"{package}.logic.use_case",
         f"{package}.nested",
         f"{package}.store.memory",
+        f"{package}.store.mysql",
     )
     assert f"{package}.http.routes" not in sys.modules
     assert f"{package}.logic.use_case" not in sys.modules
@@ -122,7 +123,7 @@ def test_nonstandard_layer_names_complete_real_http_and_di(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """web、logic、store 目录应完成真实请求，未启用后端不导入。"""
+    """web、logic、store 目录应完成真实请求，禁用 Repository 不参与绑定。"""
     package = "arbitrary_layers_app"
     _write_package(
         tmp_path,
@@ -165,15 +166,16 @@ def test_nonstandard_layer_names_complete_real_http_and_di(
             "store/memory.py": (
                 "from lilywhite import repository\n"
                 "from .contracts import GreetingRepository\n"
-                '@repository(GreetingRepository, backend="memory")\n'
+                "@repository(GreetingRepository)\n"
                 "class MemoryGreetingRepository:\n"
                 "    def greet(self) -> str:\n"
                 '        return "春が来た，Lily"\n'
             ),
             "store/mysql.py": (
-                "from lilywhite import repository\n"
+                "from lilywhite import enabled, repository\n"
                 "from .contracts import GreetingRepository\n"
-                '@repository(GreetingRepository, backend="mysql")\n'
+                "@enabled(lambda _config: False)\n"
+                "@repository(GreetingRepository)\n"
                 "class MySQLGreetingRepository:\n"
                 "    def greet(self) -> str:\n"
                 '        return "不应启用"\n'
@@ -192,34 +194,4 @@ def test_nonstandard_layer_names_complete_real_http_and_di(
 
     assert response.status_code == 200
     assert response.json() == {"message": "春が来た，Lily"}
-    assert f"{package}.store.mysql" not in sys.modules
-
-
-def test_dynamic_repository_backend_fails_before_import(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """动态后端无法静态筛选时，应指出源码位置而不是静默误导入。"""
-    package = "dynamic_backend_app"
-    _write_package(
-        tmp_path,
-        package,
-        {
-            "__init__.py": '"""动态后端示例。"""\n',
-            "adapter.py": (
-                "from lilywhite import repository\n"
-                "backend = 'memory'\n"
-                "class Contract:\n"
-                "    pass\n"
-                "@repository(Contract, backend=backend)\n"
-                "class Adapter:\n"
-                "    pass\n"
-            ),
-        },
-    )
-    monkeypatch.syspath_prepend(str(tmp_path))
-
-    with pytest.raises(StaticDiscoveryError, match=r"adapter.py:5.*backend 必须是字符串字面量"):
-        scan_decorated_modules(package)
-
-    assert f"{package}.adapter" not in sys.modules
+    assert f"{package}.store.mysql" in sys.modules

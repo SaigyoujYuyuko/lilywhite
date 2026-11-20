@@ -27,7 +27,6 @@ class ExampleApplication:
 
     application_name = "LilyWhite Greeting Example"
     application_version = "0.5.0"
-    backends = ("memory",)
 
     # def banner(self) -> str:
     #     """用自定义彩色字符画覆盖框架默认 Banner。"""

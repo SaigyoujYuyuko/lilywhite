@@ -17,22 +17,21 @@ class RepositoryRegistration(msgspec.Struct, frozen=True):
     lifetime: LifetimeType
 
 
-def _namespace(interface: type[object], backend: str, lifetime: LifetimeType) -> str:
-    """生成按后端、Interface 和生命周期隔离的命名空间。"""
-    return f"{backend}:{interface.__module__}.{interface.__qualname__}:{lifetime.value}"
+def _namespace(interface: type[object], lifetime: LifetimeType) -> str:
+    """生成按 Interface 和生命周期隔离的命名空间。"""
+    return f"{interface.__module__}.{interface.__qualname__}:{lifetime.value}"
 
 
 def repository[T](
     interface: type[object],
     *,
-    backend: str,
     lifetime: LifetimeType = LifetimeType.SINGLETON,
 ) -> Callable[[type[T]], type[T]]:
-    """把存储实现注册为指定 Interface 在后端下的实现。"""
+    """把存储实现注册为指定 Interface 的候选实现。"""
 
     def register(implementation: type[T]) -> type[T]:
         """记录实现类型并保留原始类定义。"""
-        repository_registry.register_type(_namespace(interface, backend, lifetime), implementation)
+        repository_registry.register_type(_namespace(interface, lifetime), implementation)
         return implementation
 
     return register
@@ -40,16 +39,15 @@ def repository[T](
 
 def registered_repositories(
     interface: type[object],
-    backend: str,
     *,
     package_names: tuple[str, ...] | None = None,
 ) -> list[RepositoryRegistration]:
-    """返回指定包内 Interface 在所选后端下的全部实现及生命周期。"""
+    """返回指定包内 Interface 的全部候选实现及生命周期。"""
     return [
         RepositoryRegistration(implementation=implementation, lifetime=lifetime)
         for lifetime in LifetimeType
         for implementation in repository_registry.types_in_packages(
-            _namespace(interface, backend, lifetime), package_names
+            _namespace(interface, lifetime), package_names
         )
     ]
 

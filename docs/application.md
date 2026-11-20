@@ -2,7 +2,7 @@
 
 ## `@LilywhiteMain`
 
-入口类负责声明应用元数据、默认后端和可选生命周期钩子：
+入口类负责声明应用元数据、配置类型和可选生命周期钩子：
 
 ```python
 # my_app/application.py
@@ -15,7 +15,6 @@ log = LoggerManager.get_logger("MY_APP")
 class MyApplication:
     application_name = "My LilyWhite App"
     application_version = "0.1.0"
-    backends = ("memory",)
 
     async def on_startup(self) -> None:
         log.info("application startup")
@@ -25,7 +24,7 @@ class MyApplication:
 ```
 
 - `application_name` 和 `application_version` 显示在默认 Banner 上。
-- `backends` 是默认启用的 Repository 后端；命令行 `--backend` 可以覆盖它。
+- `properties_type` 可以指定带业务分组的 `AppProperties` 子类，省略时使用框架默认配置。
 - `on_startup()` 和 `on_shutdown()` 可以省略，同步方法和异步方法都可以。
 
 再通过 `run()` 启动：
@@ -50,18 +49,9 @@ uv run python -m my_app --help
 | `--config PATH` | YAML 配置路径，默认 `config.yaml` |
 | `--host HOST` | 覆盖 `server.host` |
 | `--port PORT` | 覆盖 `server.port` |
-| `--backend NAME` | 启用后端，可重复传入 |
 | `--log-level LEVEL` | 覆盖应用日志级别 |
 | `--log-file PATH` | 覆盖日志文件路径 |
 | `--no-console` | 关闭控制台日志 |
-
-例如同时选择两个后端：
-
-```bash
-uv run python -m my_app --backend mysql --backend redis
-```
-
-如果同一个 Repository Interface 在两个启用后端中都有实现，容器会在启动时报告冲突。
 
 ## Banner
 
@@ -198,7 +188,6 @@ properties = AppProperties().override(server={"host": "127.0.0.1", "port": 9527}
 application = LilyWhiteApplication(
     properties,
     business_package="my_app",
-    backends=("memory",),
     application_name="My LilyWhite App",
 ).create_app()
 

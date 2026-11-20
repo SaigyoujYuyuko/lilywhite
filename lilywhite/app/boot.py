@@ -46,17 +46,15 @@ def _application_version(main_type: type[object]) -> str:
         return "0.1.0"
 
 
-def _default_backends(main_type: type[object]) -> str | tuple[str, ...]:
-    """读取入口类默认后端，并显式检查声明类型。"""
+def _properties_type(main_type: type[object]) -> type[AppProperties]:
+    """读取入口声明的配置类型，未声明时使用框架默认配置。"""
     try:
-        value = main_type.backends  # type: ignore[attr-defined]
+        value = main_type.properties_type  # type: ignore[attr-defined]
     except AttributeError:
-        return ("memory",)
-    if isinstance(value, str):
+        return AppProperties
+    if isinstance(value, type) and issubclass(value, AppProperties):
         return value
-    if isinstance(value, tuple) and all(isinstance(item, str) for item in value):
-        return value
-    raise TypeError("入口类 backends 必须是字符串或字符串元组")
+    raise TypeError("入口类 properties_type 必须是 AppProperties 子类")
 
 
 def _print_entry_banner(
@@ -99,7 +97,6 @@ def _print_entry_banner(
 def _create_application(
     main_type: type[object],
     properties: AppProperties,
-    backends: str | tuple[str, ...],
     entry: object | None = None,
     external_server: bool = False,
 ) -> Litestar:
@@ -118,7 +115,6 @@ def _create_application(
         use_custom_logger(logger_override())
     framework = LilyWhiteApplication(
         properties,
-        backends=backends,
         controller_packages=("lilywhite.controller",),
         business_package=package,
         application_name=_application_name(main_type),
@@ -152,12 +148,9 @@ def LilywhiteMain[T](target: type[T]) -> type[T]:
         """缓存当前入口实例的 Litestar 应用并转发 ASGI 调用。"""
         application = self.__lilywhite_asgi_application__  # type: ignore[attr-defined]
         if not isinstance(application, Litestar):
-            properties = ConfigLoader(Path("config.yaml")).load()
+            properties = ConfigLoader(Path("config.yaml")).load(_properties_type(type(self)))
             _print_entry_banner(type(self), properties, external_server=True, entry=self)
-            backends = _default_backends(type(self))
-            application = _create_application(
-                type(self), properties, backends, entry=self, external_server=True
-            )
+            application = _create_application(type(self), properties, entry=self, external_server=True)
             self.__lilywhite_asgi_application__ = application  # type: ignore[attr-defined]
         await application(scope, receive, send)
 
@@ -174,7 +167,6 @@ def run(main_type: type[object], argv: list[str] | None = None) -> None:
     parser.add_argument("--config", type=Path, default=Path("config.yaml"))
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
-    parser.add_argument("--backend", action="append", help="启用后端，可重复传入")
     parser.add_argument(
         "--log-level",
         type=str.upper,
@@ -184,7 +176,7 @@ def run(main_type: type[object], argv: list[str] | None = None) -> None:
     parser.add_argument("--no-console", action="store_true")
     args = parser.parse_args(argv)
 
-    properties = ConfigLoader(args.config).load()
+    properties = ConfigLoader(args.config).load(_properties_type(main_type))
     properties = properties.override(
         server={
             "host": properties.server.host if args.host is None else args.host,
@@ -199,10 +191,9 @@ def run(main_type: type[object], argv: list[str] | None = None) -> None:
 
     completed_normally = False
     try:
-        backends = tuple(args.backend) if args.backend else _default_backends(main_type)
         entry = main_type()
         _print_entry_banner(main_type, properties, entry=entry)
-        application = _create_application(main_type, properties, backends, entry=entry)
+        application = _create_application(main_type, properties, entry=entry)
         uvicorn.run(
             application,
             host=properties.server.host,

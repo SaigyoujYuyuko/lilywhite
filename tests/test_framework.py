@@ -144,7 +144,6 @@ def test_entry_shutdown_hook_runs_after_real_lifespan() -> None:
     application = main_module._create_application(
         LifecycleApplication,
         AppProperties(),
-        ("memory",),
         entry=entry,
     )
 
@@ -184,7 +183,6 @@ def test_entry_override_logger_accepts_standard_logger_instance() -> None:
         application = main_module._create_application(
             CustomLoggerApplication,
             AppProperties(),
-            ("memory",),
             entry=entry,
         )
         with TestClient(application):
@@ -196,7 +194,7 @@ def test_entry_override_logger_accepts_standard_logger_instance() -> None:
     messages = [record.getMessage() for record in collector.records]
     assert "logging initialized" in messages
     assert any(
-        message.startswith("dependency container scan start backends=('memory',)") for message in messages
+        message.startswith("dependency container scan start business_package=") for message in messages
     )
     assert "server shutdown complete" in messages
 

@@ -68,7 +68,7 @@ PowerShell 可以直接写成一行：
 uv run python -m my_app --config config.yaml --host 0.0.0.0 --port 9527 --log-level DEBUG
 ```
 
-命令行只覆盖显式传入的字段，其余值继续来自 YAML。`--no-console` 会关闭控制台输出；`--backend` 覆盖入口类的默认后端。
+命令行只覆盖显式传入的字段，其余值继续来自 YAML。`--no-console` 会关闭控制台输出。
 
 ## 在代码里读取和覆盖
 
@@ -152,3 +152,79 @@ print(config.server.cors.allow_origins)
 ```
 
 `ProjectConfig` 是自己的业务配置模型；框架启动命令使用的内置 HTTP、日志和运维配置仍是 `AppProperties`。
+
+## 业务配置类型与功能开关
+
+需要让业务分组参与框架启动和条件装配时，继承 `AppProperties`，再把它显式传给 `ConfigLoader`：
+
+```python
+from lilywhite import AppProperties
+from lilywhite.config import ConfigLoader, section, setting
+
+class ProjectProperties(AppProperties):
+    features = section(
+        ai=setting(False),
+        cache=setting(True),
+    )
+
+properties = ConfigLoader(Path("config.yaml")).load(ProjectProperties)
+```
+
+入口类声明 `properties_type` 后，`run()` 和 ASGI 启动都会使用这份配置类型：
+
+```python
+from lilywhite import LilywhiteMain
+
+@LilywhiteMain
+class MyApplication:
+    properties_type = ProjectProperties
+```
+
+对应的 YAML 可以写：
+
+```yaml
+version: 1
+features:
+  ai: true
+  cache: false
+```
+
+## 条件装配
+
+`@enabled()` 接收一个返回 `bool` 的条件。条件在容器装配时执行，参数是实际加载的配置对象；未声明条件的目标始终启用。
+
+```python
+from lilywhite import bean, configuration, enabled
+
+@configuration
+@enabled(lambda config: config.features.ai)
+class AIConfiguration:
+    @bean
+    def ai_client(self) -> AIClient:
+        return AIClient()
+```
+
+条件可以放在配置类、单个 Bean、Component、Service 或 Repository 上。Controller 和 WebSocket Controller 不参与条件装配，误用 `@enabled` 会直接抛出 `TypeError`。多个条件需要组合时直接写 Python 表达式：
+
+```python
+@enabled(lambda config: config.features.ai and config.server.host == "127.0.0.1")
+```
+
+复杂条件也可以写成带业务配置类型的普通函数：
+
+```python
+def ai_enabled(config: ProjectProperties) -> bool:
+    return config.features.ai
+
+@enabled(ai_enabled)
+```
+
+条件语义：
+
+- 配置类禁用时，整组 Bean 都不注册，也不会创建配置类实例。
+- 单个 Bean、Component 或 Service 禁用时，只跳过对应目标。
+- Repository 在候选实现绑定前过滤；没有其他启用实现且业务仍依赖该接口时，启动会明确报告依赖未注册。
+- 业务组件禁用后，其他启用的后备组件可以补位；后备组件自身也遵守条件。
+- 禁用目标不会创建实例或注册生命周期。
+
+不要在 Bean 工厂里返回 `None` 表示禁用，也不要在模块顶层用 `if config...` 包住装饰器类。前者破坏类型约定，后者会把配置加载与模块导入顺序耦合起来。

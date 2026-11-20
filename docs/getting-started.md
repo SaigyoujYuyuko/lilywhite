@@ -82,7 +82,6 @@ from lilywhite import LilywhiteMain
 class MyApplication:
     application_name = "My LilyWhite App"
     application_version = "0.1.0"
-    backends = ("memory",)
 ```
 
 入口类所在的顶层包就是业务扫描范围。这里会扫描 `my_app`，因此 `my_app/web/greeting.py` 上的 `@controller` 会被发现。

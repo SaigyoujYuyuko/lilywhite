@@ -12,14 +12,15 @@ from litestar.di import Provide
 
 from ..config import AppProperties
 from ..decorators import component as component_registrations
-from ..decorators import configuration as configuration_registrations
 from ..decorators import repository as repository_registrations
 from ..decorators import service as service_registrations
-from ..decorators.configuration import BeanFactory
+from ..decorators.conditional import condition_enabled
+from ..decorators.configuration import _impl as configuration_registrations
+from ..decorators.configuration._impl import BeanFactory
 from ..lifecycle import ManagedComponent, RequestScopedResource
 from ..logger import LoggerManager
 from ..utils.registry import LifetimeType
-from .discovery import BackendSelection, import_decorated_modules, import_package_modules, normalize_backends
+from .discovery import import_decorated_modules, import_package_modules
 
 log = LoggerManager.get_logger("DI")
 
@@ -104,13 +105,12 @@ class DependencyContainer:
 
     def __init__(
         self,
-        backends: BackendSelection,
         *,
         package_names: tuple[str, ...] | None = None,
     ) -> None:
-        """保存启用后端、包边界并初始化类型和生命周期注册表。"""
-        self._backends = normalize_backends(backends)
+        """保存包边界并初始化类型、配置和生命周期注册表。"""
         self._package_names = package_names
+        self._properties = AppProperties()
         self._instances: dict[type[object], object] = {}
         self._lifetimes: dict[type[object], LifetimeType] = {}
         self._implementations: dict[type[object], type[object]] = {}
@@ -129,6 +129,8 @@ class DependencyContainer:
 
     def register_instance[T](self, target: type[T], instance: T) -> None:
         """把已有资源注册为应用级单例。"""
+        if isinstance(instance, AppProperties):
+            self._properties = instance
         log.debug("resource registered type={} lifetime=singleton", _type_name(target))
         self._instances[target] = instance
         self._lifetimes[target] = LifetimeType.SINGLETON
@@ -140,6 +142,8 @@ class DependencyContainer:
         lifetime: LifetimeType = LifetimeType.SINGLETON,
     ) -> None:
         """注册可暴露给 Controller 的 Service 及其生命周期。"""
+        if not condition_enabled(service_type, self._properties):
+            return
         if service_type in self._beans:
             raise DependencyInjectionException(f"Service 与 Bean 重复注册：{_type_name(service_type)}")
         log.debug("service registered service={} lifetime={}", _type_name(service_type), lifetime.value)
@@ -154,6 +158,8 @@ class DependencyContainer:
         lifetime: LifetimeType,
     ) -> None:
         """注册可注入但不直接暴露给Controller的基础设施组件。"""
+        if not condition_enabled(implementation, self._properties):
+            return
         if interface in self._beans:
             raise DependencyInjectionException(f"Component 与 Bean 重复注册：{_type_name(interface)}")
         log.debug(
@@ -167,6 +173,8 @@ class DependencyContainer:
 
     def register_bean(self, configuration: object, factory: BeanFactory) -> None:
         """注册配置类中的同步工厂方法及其返回类型。"""
+        if not condition_enabled(factory, self._properties):
+            return
         if iscoroutinefunction(factory):
             raise DependencyInjectionException(f"Bean 工厂必须是同步方法：{factory.__qualname__}")
         return_type = get_type_hints(factory).get("return")
@@ -245,26 +253,24 @@ class DependencyContainer:
             return self._lifetimes[target]
 
         candidates = [
-            (backend, registration)
-            for backend in self._backends
+            registration
             for registration in repository_registrations.registered_repositories(
                 target,
-                backend,
                 package_names=self._package_names,
             )
+            if condition_enabled(registration.implementation, self._properties)
         ]
         if not candidates:
             raise DependencyInjectionException(f"依赖未注册：{_type_name(target)}")
         if len(candidates) > 1:
             raise DependencyInjectionException(f"依赖存在多个实现：{_type_name(target)}")
-        backend, registration = candidates[0]
+        registration = candidates[0]
         self._lifetimes[target] = registration.lifetime
         self._implementations[target] = registration.implementation
         log.debug(
-            "repository binding interface={} implementation={} backend={} lifetime={}",
+            "repository binding interface={} implementation={} lifetime={}",
             _type_name(target),
             _type_name(registration.implementation),
-            backend,
             registration.lifetime.value,
         )
         return registration.lifetime
@@ -415,25 +421,20 @@ class DependencyContainer:
 def create_container(
     *,
     properties: AppProperties | None = None,
-    backends: BackendSelection = "memory",
     business_package: str | None = None,
     resources: Mapping[type[object], object] | None = None,
 ) -> DependencyContainer:
     """自动收集装饰器，按普通组件、Bean、后备组件的顺序构造依赖图。"""
-    enabled_backends = normalize_backends(backends)
     package_names = ("lilywhite",) if business_package is None else ("lilywhite", business_package)
-    log.debug(
-        "dependency container scan start backends={} business_package={}",
-        enabled_backends,
-        business_package,
-    )
+    log.debug("dependency container scan start business_package={}", business_package)
     import_package_modules("lilywhite.utils")
     import_package_modules("lilywhite.services")
     if business_package is not None:
-        import_decorated_modules(business_package, enabled_backends)
+        import_decorated_modules(business_package)
 
     properties = properties or AppProperties()
-    container = DependencyContainer(enabled_backends, package_names=package_names)
+    container = DependencyContainer(package_names=package_names)
+    container.register_instance(AppProperties, properties)
     registrations = tuple(component_registrations.registered_components(package_names))
     for registration in registrations:
         if not registration.fallback:
@@ -441,6 +442,8 @@ def create_container(
                 registration.interface, registration.implementation, registration.lifetime
             )
     for configuration_type in configuration_registrations.registered_configurations(package_names):
+        if not condition_enabled(configuration_type, properties):
+            continue
         try:
             configuration = configuration_type()
         except TypeError as error:
@@ -462,7 +465,6 @@ def create_container(
         container.register_component(
             registration.interface, registration.implementation, registration.lifetime
         )
-    container.register_instance(AppProperties, properties)
     for target, instance in (resources or {}).items():
         container.register_instance(target, instance)
     for service_registration in service_registrations.registered_services(package_names):

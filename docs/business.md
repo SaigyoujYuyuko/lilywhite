@@ -6,7 +6,7 @@
 from lilywhite import component, controller, repository, service, websocket_controller
 ```
 
-框架自身的装饰器集中在 `lilywhite.decorators`，按职责分成 `controller`、`websocket`、`service`、`repository`、`component` 和 `configuration` 模块；`bean` 与 `configuration` 放在一起。需要按模块阅读或导入时使用：
+框架自身的装饰器集中在 `lilywhite.decorators`，按职责分成 `controller`、`websocket`、`service`、`repository`、`component` 和 `configuration` 模块；`bean` 与 `configuration` 放在一起，通用条件装配位于 `conditional`。需要按模块阅读或导入时使用：
 
 ```python
 from lilywhite.decorators.controller import controller
@@ -15,7 +15,7 @@ from lilywhite.decorators.service import service
 
 这些类装饰器共享 `DecoratorRegistry`，它继承通用 `Registry`，负责全限定名注册和业务包过滤；日常业务代码继续使用顶层导入即可。
 
-LilyWhite 保留分层和构造器注入，但不生成代理类。Controller 调 Service，Service 依赖 Repository Interface，具体 Adapter 由启动时选择的后端决定。
+LilyWhite 保留分层和构造器注入，但不生成代理类。Controller 调 Service，Service 依赖 Repository Interface，具体 Adapter 由配置条件在装配时决定。
 
 ## 目录可以自由命名
 
@@ -152,49 +152,37 @@ class GreetingRepository(Protocol):
 from lilywhite import repository
 from ..greeting import GreetingRepository
 
-@repository(GreetingRepository, backend="memory")
+@repository(GreetingRepository)
 class MemoryGreetingRepository:
     def greeting(self, name: str) -> str:
         return f"你好，{name}！"
 ```
 
-`backend` 声明 Adapter 所属后端。静态扫描会跳过只包含未启用后端的 Adapter 模块，所以不同后端的可选依赖可以继续分模块放置。
-
-`backend` 必须写成字符串字面量：
+`@repository` 只声明接口的候选实现，不再接收 `backend`。需要按环境或配置选择实现时，使用统一的 `@enabled`：
 
 ```python
-# 可以静态筛选
-@repository(GreetingRepository, backend="memory")
+from lilywhite import enabled, repository
 
-# 无法在导入前确定后端，扫描会给出文件和行号
-# @repository(GreetingRepository, backend=selected_backend)
+@enabled(lambda config: config.storage.engine == "memory")
+@repository(GreetingRepository)
+class MemoryGreetingRepository:
+    pass
+
+@enabled(lambda config: config.storage.engine == "mysql")
+@repository(GreetingRepository)
+class MySQLGreetingRepository:
+    pass
 ```
 
-不需要 `backend_packages` 声明，也不要求 Adapter 的目录名等于后端名。
+`storage.engine` 是来自实际 `AppProperties` 子类的业务配置。静态扫描只负责发现装饰器模块，条件会在配置加载后、依赖绑定前执行；不要求 Adapter 的目录名具有特殊含义。
 
-入口类可以声明默认后端：
-
-```python
-@LilywhiteMain
-class MyApplication:
-    backends = ("memory",)
-```
-
-启动时覆盖：
-
-```bash
-uv run python -m my_app --backend memory
-uv run python -m my_app --backend mysql --backend redis
-```
-
-多个启用后端为同一个 Interface 提供实现时，启动会报告多个实现冲突。
+同一个 Interface 必须恰好有一个启用的实现。没有实现或存在多个启用实现时，容器都会在启动阶段给出明确错误。
 
 Repository 也支持生命周期：
 
 ```python
 @repository(
     GreetingRepository,
-    backend="memory",
     lifetime=LifetimeType.SINGLETON,
 )
 class MemoryGreetingRepository:
@@ -392,7 +380,7 @@ class BusinessConfiguration:
 启动构造依赖图时，会检查：
 
 - 构造器依赖是否已注册。
-- Repository Interface 在所选后端下是否恰好有一个实现。
+- Repository Interface 是否恰好有一个已启用的实现。
 - 是否存在循环依赖。
 - Singleton 是否捕获了较短生命周期的依赖。
 - Singleton 组件的创建是否成功。

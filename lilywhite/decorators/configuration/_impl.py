@@ -1,10 +1,10 @@
-"""配置类与同步工厂 Bean 的显式注册装饰器。"""
+"""配置类与同步工厂 Bean 的显式注册装饰器。（内部实现）"""
 
 from collections.abc import Callable, Iterator
 from typing import Protocol, overload
 
-from ..utils.registry import Registry
-from .registry import DecoratorRegistry, qualified_name
+from ...utils.registry import Registry
+from ..registry import DecoratorRegistry, qualified_name
 
 
 class BeanFactory(Protocol):

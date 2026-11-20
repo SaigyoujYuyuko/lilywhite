@@ -1,8 +1,6 @@
 """LilyWhite 装饰器筛选、精确导入与 Controller 收集。"""
 
-import ast
 from importlib import import_module
-from pathlib import Path
 from pkgutil import walk_packages
 from types import ModuleType
 
@@ -18,8 +16,6 @@ StaticDiscoveryError = StaticScanError
 
 log = LoggerManager.get_logger("DI")
 
-type BackendSelection = str | tuple[str, ...]
-
 _DECORATOR_SOURCES = {
     "controller": frozenset({"lilywhite", "lilywhite.decorators.controller"}),
     "websocket_controller": frozenset({"lilywhite", "lilywhite.decorators.websocket"}),
@@ -30,47 +26,11 @@ _DECORATOR_SOURCES = {
 }
 
 
-def normalize_backends(selection: BackendSelection) -> tuple[str, ...]:
-    """规范化单个或多个后端名称，去空、去重并保持声明顺序。"""
-    values = (selection,) if isinstance(selection, str) else selection
-    normalized = tuple(dict.fromkeys(value.strip() for value in values))
-    if not normalized or any(not value for value in normalized):
-        raise ValueError("至少启用一个非空存储后端")
-    return normalized
-
-
-def _repository_backend(decorator: ast.expr, source: Path) -> str:
-    """读取 Repository 的静态后端名，动态表达式会在导入前明确报错。"""
-    location = f"{source}:{decorator.lineno}"
-    if not isinstance(decorator, ast.Call):
-        raise StaticScanError(f"{location} 的 @repository 必须显式声明字符串 backend")
-    keyword = next((item for item in decorator.keywords if item.arg == "backend"), None)
-    if (
-        keyword is None
-        or not isinstance(keyword.value, ast.Constant)
-        or not isinstance(keyword.value.value, str)
-    ):
-        raise StaticScanError(f"{location} 的 @repository backend 必须是字符串字面量")
-    backend = keyword.value.value.strip()
-    if not backend:
-        raise StaticScanError(f"{location} 的 @repository backend 不能为空")
-    return backend
-
-
-def scan_decorated_modules(
-    package_name: str,
-    backends: BackendSelection = "memory",
-) -> tuple[str, ...]:
-    """按 LilyWhite 装饰器和启用后端筛选需要导入的模块。"""
-    enabled_backends = normalize_backends(backends)
-    log.debug("static scan start package={} backends={}", package_name, enabled_backends)
+def scan_decorated_modules(package_name: str) -> tuple[str, ...]:
+    """按 LilyWhite 装饰器筛选需要导入的模块，不在扫描阶段执行条件。"""
+    log.debug("static scan start package={}", package_name)
     discovered: set[str] = set()
     for item in scan_decorated_classes(package_name, _DECORATOR_SOURCES):
-        if (
-            item.decorator == "repository"
-            and _repository_backend(item.node, item.source) not in enabled_backends
-        ):
-            continue
         discovered.add(item.module)
         log.trace("static module selected module={}", item.module)
 
@@ -79,13 +39,10 @@ def scan_decorated_modules(
     return modules
 
 
-def import_decorated_modules(
-    package_name: str,
-    backends: BackendSelection = "memory",
-) -> list[ModuleType]:
+def import_decorated_modules(package_name: str) -> list[ModuleType]:
     """只导入静态扫描选中的模块，让原有装饰器完成真实注册。"""
     imported: list[ModuleType] = []
-    for module_name in scan_decorated_modules(package_name, backends):
+    for module_name in scan_decorated_modules(package_name):
         log.trace("module import module={}", module_name)
         imported.append(import_module(module_name))
     return imported
@@ -139,12 +96,9 @@ def discover_controllers(package_name: str = "lilywhite.controller") -> list[typ
     return _sorted_controllers(package_name)
 
 
-def discover_business_controllers(
-    package_name: str,
-    backends: BackendSelection,
-) -> list[type[Controller]]:
+def discover_business_controllers(package_name: str) -> list[type[Controller]]:
     """静态发现并精确导入业务模块，再收集当前业务包的 Controller。"""
-    import_decorated_modules(package_name, backends)
+    import_decorated_modules(package_name)
     return _sorted_controllers(package_name)
 
 
@@ -166,13 +120,11 @@ def discover_websocket_controllers(package_name: str) -> list[type[WebsocketList
 
 
 __all__ = [
-    "BackendSelection",
     "StaticDiscoveryError",
     "discover_business_controllers",
     "discover_controllers",
     "discover_websocket_controllers",
     "import_decorated_modules",
     "import_package_modules",
-    "normalize_backends",
     "scan_decorated_modules",
 ]

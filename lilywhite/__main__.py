@@ -16,7 +16,6 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--config", type=Path, default=Path("config.yaml"))
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
-    parser.add_argument("--backend", action="append", help="启用后端，可重复传入")
     parser.add_argument(
         "--log-level",
         type=str.upper,
@@ -41,8 +40,7 @@ def main(argv: list[str] | None = None) -> None:
 
     completed_normally = False
     try:
-        backends = tuple(args.backend or ["memory"])
-        application = LilyWhiteApplication(properties, backends=backends).create_app()
+        application = LilyWhiteApplication(properties).create_app()
         uvicorn.run(
             application,
             host=properties.server.host,

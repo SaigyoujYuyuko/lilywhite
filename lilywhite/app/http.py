@@ -37,7 +37,7 @@ def create_http_app(
     if runtime.business_package is not None:
         route_handlers.extend(
             (
-                *discover_business_controllers(runtime.business_package, runtime.backends),
+                *discover_business_controllers(runtime.business_package),
                 *discover_websocket_controllers(runtime.business_package),
             )
         )

@@ -20,7 +20,7 @@ def test_background_scope_reuses_and_closes_scoped_resource() -> None:
     """后台任务应复用 Scoped 实例，并在作用域结束时释放一次。"""
 
     async def exercise() -> None:
-        container = DependencyContainer("memory")
+        container = DependencyContainer()
         container.register_service(ScopedResource, LifetimeType.SCOPED)
         container.build()
         scope = container.create_scope()

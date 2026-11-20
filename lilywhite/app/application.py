@@ -22,7 +22,6 @@ class LilyWhiteApplication:
         self,
         properties: AppProperties,
         *,
-        backends: str | tuple[str, ...] = "memory",
         resources: Mapping[type[object], object] | None = None,
         controller_packages: tuple[str, ...] = ("lilywhite.controller",),
         business_package: str | None = None,
@@ -36,7 +35,6 @@ class LilyWhiteApplication:
         install_exception_hooks()
         self._log = LoggerManager.get_logger("APP")
         self._log.info("logging initialized")
-        self._backend = backends
         self._application_name = application_name
         self._url = (
             "external ASGI server"
@@ -45,7 +43,6 @@ class LilyWhiteApplication:
         )
         self._runtime = ApplicationRuntime(
             properties,
-            backends=backends,
             resources=resources,
             business_package=business_package,
         )
@@ -77,12 +74,7 @@ class LilyWhiteApplication:
             self._log.error("server startup failed type={}", type(error).__name__)
             raise
 
-        self._log.info(
-            "{}: server is running on: {}; backend: {}",
-            self._application_name,
-            self._url,
-            self._backend,
-        )
+        self._log.info("{}: server is running on: {}", self._application_name, self._url)
         try:
             yield
         finally:

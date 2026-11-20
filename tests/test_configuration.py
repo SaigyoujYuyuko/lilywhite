@@ -55,7 +55,7 @@ def register_configuration(container: DependencyContainer, configuration_type: t
 
 def test_bean_dependencies_are_singletons_and_managed_components() -> None:
     """工厂参数按类型注入，Bean 复用并进入托管组件列表。"""
-    container = DependencyContainer("memory")
+    container = DependencyContainer()
     register_configuration(container, DatabaseConfiguration)
     container.build()
 
@@ -70,7 +70,7 @@ def test_bean_dependencies_are_singletons_and_managed_components() -> None:
 
 def test_bound_bean_method_does_not_receive_configuration_twice() -> None:
     """直接注册绑定方法时，self 只能由方法描述符提供一次。"""
-    container = DependencyContainer("memory")
+    container = DependencyContainer()
     configuration = DatabaseConfiguration()
     container.register_bean(configuration, configuration.engine)
     container.build()
@@ -91,7 +91,7 @@ def test_duplicate_bean_return_type_is_rejected() -> None:
         def second_engine(self) -> Engine:
             return Engine("second")
 
-    container = DependencyContainer("memory")
+    container = DependencyContainer()
     instance = DuplicateConfiguration()
     container.register_bean(instance, instance.first_engine)
 
@@ -108,7 +108,7 @@ def test_async_bean_factory_is_rejected_explicitly() -> None:
         async def engine(self) -> Engine:
             return Engine("async")
 
-    container = DependencyContainer("memory")
+    container = DependencyContainer()
     instance = AsyncConfiguration()
 
     with pytest.raises(DependencyInjectionException, match="必须是同步方法"):
@@ -124,7 +124,7 @@ def test_bean_factory_requires_concrete_return_type() -> None:
         def untyped(self):  # noqa: ANN202  # type: ignore[no-untyped-def]
             return Engine("untyped")
 
-    container = DependencyContainer("memory")
+    container = DependencyContainer()
     instance = MissingTypeConfiguration()
 
     with pytest.raises(DependencyInjectionException, match="缺少具体返回类型"):

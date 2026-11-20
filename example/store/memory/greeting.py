@@ -5,7 +5,7 @@ from lilywhite import repository
 from ...store.greeting import GreetingRepository
 
 
-@repository(GreetingRepository, backend="memory")
+@repository(GreetingRepository)
 class MemoryGreetingRepository:
     """不访问数据库的最小Repository Adapter。"""
 
