@@ -80,7 +80,7 @@ class MySQLConfiguration:
 
 `integrations.mysql: false` 时，AST 扫描会在导入前跳过整个模块，因此不需要安装 SQLAlchemy 或驱动。Redis、Kafka 也按同样方式各放一个模块；不要在一个模块里混入无条件注册的其他类。
 
-只有 `@enabled("点分.路径")` 能在导入前求值。`@enabled(lambda config: ...)` 更灵活，但必须导入模块后计算，所以模块顶层的第三方依赖仍需要安装。Controller 和 WebSocket Controller 不参与条件装配，把可选能力放在它们调用的 Service / Configuration 中。
+字面量 `@enabled("点分.路径")` 和简单成员判断 `@enabled(lambda config: "postgres" in config.storage.enabled_backends)` 都能在导入前求值，支持 `in` 与 `not in`。其他 lambda 或普通谓词函数更灵活，但必须导入模块后计算，所以模块顶层的第三方依赖仍需要安装。Controller 和 WebSocket Controller 不参与条件装配，把可选能力放在它们调用的 Service / Configuration 中。
 
 ## 后台任务、测试和多应用
 

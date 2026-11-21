@@ -113,3 +113,36 @@ def test_dynamic_condition_keeps_general_enabled_semantics() -> None:
         pass
 
     assert not condition_enabled(DynamicDisabled, AppProperties())
+
+
+def test_membership_lambda_skips_missing_disabled_driver(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SQLite/后端成员判断为 False 时，PostgreSQL 驱动不应在导入阶段触发。"""
+
+    class BackendProperties(AppProperties):
+        storage = section(enabled_backends=("memory",))
+
+    package = "membership_optional_dependency_app"
+    root = tmp_path / package
+    root.mkdir()
+    (root / "__init__.py").write_text('"""成员条件可选依赖。"""\n', encoding="utf-8")
+    (root / "postgres.py").write_text(
+        "import missing_lilywhite_postgres_driver\n"
+        "from lilywhite import enabled, service\n"
+        "@enabled(lambda properties: 'postgres' in properties.storage.enabled_backends)\n"
+        "@service\n"
+        "class PostgresService:\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    (root / "memory.py").write_text(
+        "from lilywhite import service\n@service\nclass MemoryService:\n    pass\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    ApplicationRuntime(BackendProperties(), business_package=package)
+
+    assert f"{package}.postgres" not in sys.modules

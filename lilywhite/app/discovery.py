@@ -35,7 +35,7 @@ _CONDITIONAL_DECORATORS = frozenset({"service", "repository", "component", "conf
 
 
 def _static_condition_path(item: DecoratedClass) -> str | None:
-    """只提取字面量配置路径；lambda 等动态条件仍需真实导入后计算。"""
+    """提取字面量配置路径；其他动态条件仍需真实导入后计算。"""
     condition = item.condition
     if condition is None or not isinstance(condition, ast.Call) or condition.keywords:
         return None
@@ -45,10 +45,54 @@ def _static_condition_path(item: DecoratedClass) -> str | None:
     return path if isinstance(path, str) else None
 
 
+def _attribute_path(expression: ast.expr, root: str) -> str | None:
+    """把 properties.storage.enabled_backends 还原为点分配置路径。"""
+    parts: list[str] = []
+    current = expression
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+    if not isinstance(current, ast.Name) or current.id != root or not parts:
+        return None
+    return ".".join(reversed(parts))
+
+
+def _static_membership_condition(item: DecoratedClass, properties: AppProperties) -> bool | None:
+    """安全计算常量 in/not in 配置集合的简单 lambda，不执行任意表达式。"""
+    condition = item.condition
+    if condition is None or not isinstance(condition, ast.Call) or condition.keywords:
+        return None
+    if len(condition.args) != 1 or not isinstance(condition.args[0], ast.Lambda):
+        return None
+    function = condition.args[0]
+    if len(function.args.args) != 1 or not isinstance(function.body, ast.Compare):
+        return None
+    comparison = function.body
+    if (
+        len(comparison.ops) != 1
+        or not isinstance(comparison.ops[0], ast.In | ast.NotIn)
+        or len(comparison.comparators) != 1
+        or not isinstance(comparison.left, ast.Constant)
+    ):
+        return None
+    path = _attribute_path(comparison.comparators[0], function.args.args[0].arg)
+    if path is None:
+        return None
+    try:
+        values = properties._read_path(path)
+    except (KeyError, AttributeError, ValueError) as error:
+        raise ValueError(f"启用条件的配置路径不存在：{path}") from error
+    result = comparison.left.value in values
+    return not result if isinstance(comparison.ops[0], ast.NotIn) else result
+
+
 def _statically_disabled(item: DecoratedClass, properties: AppProperties) -> bool:
     """在导入前排除明确关闭的集成模块，不推测任意 Python 条件。"""
     if item.decorator not in _CONDITIONAL_DECORATORS:
         return False
+    membership = _static_membership_condition(item, properties)
+    if membership is not None:
+        return not membership
     path = _static_condition_path(item)
     if path is None:
         return False

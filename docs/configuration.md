@@ -223,6 +223,8 @@ def ai_enabled(config: ProjectProperties) -> bool:
 @enabled(ai_enabled)
 ```
 
+静态导入排除支持字面量路径，以及 `@enabled(lambda config: "postgres" in config.storage.enabled_backends)` 这种常量和配置集合之间的 `in` / `not in` 判断。其他 lambda 和普通函数仍在模块导入后计算。
+
 条件语义：
 
 - 配置类禁用时，整组 Bean 都不注册，也不会创建配置类实例。
