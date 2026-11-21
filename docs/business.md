@@ -81,7 +81,7 @@ class GreetingController(Controller):
         greeting_service: NamedDependency[GreetingService],
     ) -> Response[object]:
         result = greeting_service.greet(name)
-        return ok(result.data)
+        return ok(result)
 ```
 
 Controller 管 HTTP 参数和结果映射。Service 参数使用 `NamedDependency[具体Service]`，Litestar 会从 LilyWhite 容器提供的依赖表中取值。
@@ -97,7 +97,6 @@ Service 的依赖直接写进构造器：
 import msgspec
 
 from lilywhite import service
-from lilywhite.services.result import ServiceResult, success
 from ..store.greeting import GreetingRepository
 
 class GreetingResult(msgspec.Struct, frozen=True):
@@ -108,8 +107,8 @@ class GreetingService:
     def __init__(self, greeting_repository: GreetingRepository) -> None:
         self._greeting_repository = greeting_repository
 
-    def greet(self, name: str) -> ServiceResult[GreetingResult]:
-        return success(GreetingResult(message=self._greeting_repository.greeting(name)))
+    def greet(self, name: str) -> GreetingResult:
+        return GreetingResult(message=self._greeting_repository.greeting(name))
 ```
 
 这里依赖的是 `GreetingRepository` Interface，不需要知道数据来自内存、MySQL 还是其他实现。

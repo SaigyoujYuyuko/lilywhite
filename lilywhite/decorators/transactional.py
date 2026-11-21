@@ -4,7 +4,7 @@ from collections.abc import Callable, Coroutine
 from inspect import iscoroutinefunction
 from typing import Any, Concatenate, Protocol
 
-from ..storage import TransactionBoundary
+from ..transaction import TransactionBoundary
 
 
 class TransactionalService(Protocol):

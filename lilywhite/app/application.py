@@ -24,7 +24,7 @@ class LilyWhiteApplication:
         properties: AppProperties,
         *,
         resources: Mapping[type[object], object] | None = None,
-        controller_packages: tuple[str, ...] = ("lilywhite.controller",),
+        controller_packages: tuple[str, ...] = ("lilywhite.http",),
         business_package: str | None = None,
         managed_registries: ManagedRegistrySelection = (),
         optional_imports: tuple[str, ...] = (),

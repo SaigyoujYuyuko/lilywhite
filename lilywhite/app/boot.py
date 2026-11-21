@@ -140,7 +140,7 @@ def _create_application(
         use_custom_logger(logger_override())
     framework = LilyWhiteApplication(
         properties,
-        controller_packages=("lilywhite.controller",),
+        controller_packages=("lilywhite.http",),
         business_package=package,
         managed_registries=_managed_registries(entry),
         optional_imports=_optional_imports(entry, properties),

@@ -151,19 +151,6 @@ return sse(events(), event_type="greeting")
 
 需要断线重连时，用 `event_id=lambda event: ...` 提供事件 ID；`retry_duration` 和 `headers` 也可以按业务调整。
 
-## Service 业务结果
-
-Service 层可以使用不依赖 HTTP 的结果模型：
-
-```python
-from lilywhite.services.result import ServiceResult, success
-
-return success({"message": "春天来了"})
-return ServiceResult.failure("sticker_not_found", "表情不存在")
-```
-
-Controller 再决定如何映射为 HTTP 响应。这样业务错误码不需要和 HTTP 状态类混在一起。
-
 ## 日志级别
 
 应用和第三方日志级别都可以设置为：

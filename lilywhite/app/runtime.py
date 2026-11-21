@@ -3,10 +3,10 @@
 from collections.abc import Mapping
 
 from ..config import AppProperties
-from ..health import HealthCenter
 from ..lifecycle import ManagedComponent
-from ..metrics import RequestMetrics
 from ..observability import LogStream
+from ..observability.health import HealthCenter
+from ..observability.metrics import RequestMetrics
 from ..utils.registry import ManagedRegistrySelection
 from .container import create_container
 from .lifespan import LifespanManager

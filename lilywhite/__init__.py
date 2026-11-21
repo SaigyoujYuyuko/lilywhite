@@ -13,7 +13,7 @@ from .decorators.transactional import transactional
 from .decorators.websocket import websocket_controller
 from .logger import override_logger
 from .qualifier import Qualifier
-from .storage import UnitOfWork
+from .transaction import UnitOfWork
 from .utils.file import AyaFileIO, FileIO
 from .utils.registry import ManagedRegistry
 from .websocket import WebSocketClient

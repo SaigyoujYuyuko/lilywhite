@@ -24,7 +24,7 @@ class GreetingController(Controller):
     ) -> Response[object]:
         """返回指定名字的问候语。"""
         result = greeting_service.greet(name)
-        return ok(result.data)
+        return ok(result)
 
 
 __all__ = ["GreetingController"]

@@ -3,7 +3,6 @@
 import msgspec
 
 from lilywhite import service
-from lilywhite.services.result import ServiceResult, success
 
 from ..store.greeting import GreetingRepository
 
@@ -22,9 +21,9 @@ class GreetingService:
         """保存由DI容器注入的Repository Interface。"""
         self._greeting_repository = greeting_repository
 
-    def greet(self, name: str) -> ServiceResult[GreetingResult]:
+    def greet(self, name: str) -> GreetingResult:
         """生成问候结果，不包含HTTP或存储实现细节。"""
-        return success(GreetingResult(message=self._greeting_repository.greeting(name)))
+        return GreetingResult(message=self._greeting_repository.greeting(name))
 
 
 __all__ = ["GreetingResult", "GreetingService"]

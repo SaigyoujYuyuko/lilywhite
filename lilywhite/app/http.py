@@ -10,7 +10,7 @@ from litestar.middleware import DefineMiddleware
 from litestar.openapi.config import OpenAPIConfig
 from litestar.types import ExceptionHandler
 
-from ..controller.middleware.metrics import RequestMetricsHooks, RequestMetricsMiddleware
+from ..http.middleware.metrics import RequestMetricsHooks, RequestMetricsMiddleware
 from .discovery import discover_business_controllers, discover_controllers, discover_websocket_controllers
 from .runtime import ApplicationRuntime
 from .scope import RequestScopeMiddleware

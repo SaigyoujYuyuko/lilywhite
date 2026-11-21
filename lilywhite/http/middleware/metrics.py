@@ -8,7 +8,7 @@ from litestar.datastructures import State
 from litestar.enums import ScopeType
 from litestar.types import ASGIApp, Message, Receive, Scope, Send
 
-from ...metrics import RequestMetrics
+from ...observability.metrics import RequestMetrics
 
 _ROUTE_KEY = "_reuse_metrics_route"
 

@@ -217,7 +217,7 @@ def _sorted_controllers(package_name: str) -> list[type[Controller]]:
     return discovered
 
 
-def discover_controllers(package_name: str = "lilywhite.controller") -> list[type[Controller]]:
+def discover_controllers(package_name: str = "lilywhite.http") -> list[type[Controller]]:
     """递归导入框架 Controller 包并收集显式注册的类型。"""
     import_package_modules(package_name)
     return _sorted_controllers(package_name)

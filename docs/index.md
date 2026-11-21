@@ -13,7 +13,7 @@
 - [大型项目组织与资源管理](large-projects.md)：模块边界、生命周期、第三方适配、可选依赖和多应用。
 - [性能基准](performance.md)：DI 缓存对比、规模化启动、请求延迟和资源回收。
 - [配置](configuration.md)：YAML、命令行覆盖、声明式分组、字段约束和跨字段校验。
-- [运维接口与响应](operations.md)：健康检查、请求指标、SSE 日志流和统一响应工具。
+- [运维接口与响应](operations.md)：健康检查、请求指标、SSE 日志流和 HTTP 响应工具。
 
 第一次使用，按“快速上手 → 业务分层与依赖注入 → 配置”的顺序读就很顺。
 
@@ -22,16 +22,14 @@
 ```text
 lilywhite/          框架本体
   app/              入口、ASGI、DI、静态发现和生命周期
-  controller/       Controller、统一结果、SSE 和 HTTP 中间件
-  services/         通用 Service、结果模型和 @service
-  storage/          事务上下文与 UnitOfWork
-  domain/           通用类型
-  observability/    日志历史和异步订阅
+  decorators/       业务分层、HTTP、配置与事务装饰器
+  http/             HTTP 响应、内置运维入口和中间件
+  observability/    健康、指标、日志订阅及其查询用例
+  websocket/        WebSocket 客户端
   utils/            @component、注册表、任务、时钟和随机源
   config.py         配置模型和 YAML 加载
+  transaction.py    事务上下文与 UnitOfWork
   logger.py         Loguru 配置
-  health.py         组件健康状态
-  metrics.py        请求指标
   banner.py         东方主题彩色 Banner
 
 example/            可直接运行的问候示例

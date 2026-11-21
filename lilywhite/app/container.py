@@ -576,7 +576,7 @@ def create_container(
     log.debug("dependency container scan start business_package={}", business_package)
     properties = properties or AppProperties()
     import_package_modules("lilywhite.utils")
-    import_package_modules("lilywhite.services")
+    import_package_modules("lilywhite.observability")
     if business_package is not None:
         import_decorated_modules(
             business_package,

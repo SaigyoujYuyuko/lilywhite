@@ -1,4 +1,4 @@
-"""服务组件健康状态与完整健康结果。"""
+"""服务组件健康状态、请求指标查询与完整健康结果。"""
 
 import threading
 import time
@@ -6,7 +6,8 @@ from enum import StrEnum
 
 import msgspec
 
-from .metrics import RequestMetricsResult
+from ..decorators.service import service
+from .metrics import RequestMetrics, RequestMetricsResult
 
 
 class HealthStatusType(StrEnum):
@@ -90,3 +91,27 @@ class HealthCenter:
             uptime_seconds=round(uptime, 3),
             components=components,
         )
+
+
+@service
+class HealthService:
+    """聚合组件健康和请求指标。"""
+
+    def __init__(self, health_center: HealthCenter, request_metrics: RequestMetrics) -> None:
+        """保存应用级健康和指标组件。"""
+        self._health_center = health_center
+        self._request_metrics = request_metrics
+
+    def get_health(self) -> HealthResult:
+        """返回完整健康状态和请求指标。"""
+        snapshot = self._health_center.snapshot()
+        return HealthResult(
+            status=snapshot.status,
+            uptime_seconds=snapshot.uptime_seconds,
+            components=snapshot.components,
+            requests=self._request_metrics.snapshot(),
+        )
+
+    def get_metrics(self) -> RequestMetricsResult:
+        """返回当前请求指标快照。"""
+        return self._request_metrics.snapshot()
