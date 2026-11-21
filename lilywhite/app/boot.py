@@ -11,6 +11,7 @@ from ..banner import print_banner
 from ..config import AppProperties, ConfigLoader
 from ..logger import override_logger as use_custom_logger
 from ..logger import shutdown_logging
+from ..utils.registry import ManagedRegistry, ManagedRegistrySelection
 from .application import LilyWhiteApplication
 
 
@@ -55,6 +56,17 @@ def _properties_type(main_type: type[object]) -> type[AppProperties]:
     if isinstance(value, type) and issubclass(value, AppProperties):
         return value
     raise TypeError("入口类 properties_type 必须是 AppProperties 子类")
+
+
+def _managed_registries(entry: object) -> ManagedRegistrySelection:
+    """读取入口显式声明的托管注册表，未声明时不扩大扫描范围。"""
+    try:
+        value = entry.managed_registries  # type: ignore[attr-defined]
+    except AttributeError:
+        return ()
+    if not isinstance(value, tuple) or not all(isinstance(item, ManagedRegistry) for item in value):
+        raise TypeError("入口类 managed_registries 必须是 ManagedRegistry 元组")
+    return value
 
 
 def _print_entry_banner(
@@ -117,6 +129,7 @@ def _create_application(
         properties,
         controller_packages=("lilywhite.controller",),
         business_package=package,
+        managed_registries=_managed_registries(entry),
         application_name=_application_name(main_type),
         external_server=external_server,
     )

@@ -53,6 +53,7 @@ uv run python -m my_app
 - [入口、Banner、生命周期与 ASGI](docs/application.md)
 - [Controller、Service、Repository 与依赖注入](docs/business.md)
 - [多数据库、多客户端与 Qualifier](docs/qualifier.md)
+- [业务装饰器与托管注册表](docs/managed-registries.md)
 - [事务、模块化与资源生命周期](docs/large-projects.md)
 - [YAML 与声明式配置](docs/configuration.md)
 - [健康检查、指标、日志流与响应格式](docs/operations.md)

@@ -14,6 +14,7 @@ from ..decorators.conditional import ConditionRegistration
 from ..decorators.controller import registered_controllers
 from ..decorators.websocket import registered_websocket_controllers
 from ..logger import LoggerManager
+from ..utils.registry import ManagedRegistrySelection
 from .ast_scan import DecoratedClass, StaticScanError, scan_decorated_classes
 
 StaticDiscoveryError = StaticScanError
@@ -53,15 +54,34 @@ def _statically_disabled(item: DecoratedClass, properties: AppProperties) -> boo
     return not ConditionRegistration(path=path).evaluate(properties)
 
 
+def _sources_with_managed_registries(
+    managed_registries: ManagedRegistrySelection,
+) -> dict[str, frozenset[str]]:
+    """把入口显式声明的业务注册表并入框架装饰器来源。"""
+    sources = dict(_DECORATOR_SOURCES)
+    for registry in managed_registries:
+        sources[registry.decorator_name] = sources.get(registry.decorator_name, frozenset()).union(
+            (registry.source,)
+        )
+        log.trace(
+            "managed registry selected decorator={} source={}",
+            registry.decorator_name,
+            registry.source,
+        )
+    return sources
+
+
 def scan_decorated_modules(
     package_name: str,
     *,
     properties: AppProperties | None = None,
+    managed_registries: ManagedRegistrySelection = (),
 ) -> tuple[str, ...]:
-    """筛选需要导入的模块；所有静态条件均关闭时跳过整个模块。"""
+    """筛选框架与托管注册表装饰器；静态条件全关时跳过模块。"""
     log.debug("static scan start package={}", package_name)
     grouped: dict[str, list[DecoratedClass]] = defaultdict(list)
-    for item in scan_decorated_classes(package_name, _DECORATOR_SOURCES):
+    sources = _sources_with_managed_registries(managed_registries)
+    for item in scan_decorated_classes(package_name, sources):
         if item.decorator != "enabled":
             grouped[item.module].append(item)
 
@@ -82,10 +102,15 @@ def import_decorated_modules(
     package_name: str,
     *,
     properties: AppProperties | None = None,
+    managed_registries: ManagedRegistrySelection = (),
 ) -> list[ModuleType]:
     """只导入静态扫描和静态条件共同选中的模块。"""
     imported: list[ModuleType] = []
-    for module_name in scan_decorated_modules(package_name, properties=properties):
+    for module_name in scan_decorated_modules(
+        package_name,
+        properties=properties,
+        managed_registries=managed_registries,
+    ):
         log.trace("module import module={}", module_name)
         imported.append(import_module(module_name))
     return imported
@@ -143,9 +168,14 @@ def discover_business_controllers(
     package_name: str,
     *,
     properties: AppProperties | None = None,
+    managed_registries: ManagedRegistrySelection = (),
 ) -> list[type[Controller]]:
-    """按同一份配置发现和导入业务 Controller，不重新启用静态排除模块。"""
-    import_decorated_modules(package_name, properties=properties)
+    """按同一份配置与托管注册表发现业务 Controller。"""
+    import_decorated_modules(
+        package_name,
+        properties=properties,
+        managed_registries=managed_registries,
+    )
     return _sorted_controllers(package_name)
 
 

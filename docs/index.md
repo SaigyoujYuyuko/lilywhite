@@ -8,6 +8,7 @@
 - [入口与应用生命周期](application.md)：`@LilywhiteMain`、启动参数、Banner、入口钩子和 ASGI。
 - [业务分层与依赖注入](business.md)：Controller、WebSocket、Service、Repository、Component、`@configuration` / `@bean` 和 AST 发现。
 - [多实例与 Qualifier](qualifier.md)：多个数据库 Engine、HTTP Client 和同 Interface 实现的命名注入。
+- [托管注册表](managed-registries.md)：业务类与函数装饰器的声明式 AST 静态发现。
 - [数据库事务](transactions.md)：请求级 AsyncSession、UnitOfWork、多 Repository 和后台任务。
 - [大型项目组织与资源管理](large-projects.md)：模块边界、生命周期、第三方适配、可选依赖和多应用。
 - [性能基准](performance.md)：DI 缓存对比、规模化启动、请求延迟和资源回收。

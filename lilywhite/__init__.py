@@ -15,6 +15,7 @@ from .logger import override_logger
 from .qualifier import Qualifier
 from .storage import UnitOfWork
 from .utils.file import AyaFileIO, FileIO
+from .utils.registry import ManagedRegistry
 from .websocket import WebSocketClient
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "FileIO",
     "LilyWhiteApplication",
     "LilywhiteMain",
+    "ManagedRegistry",
     "Qualifier",
     "UnitOfWork",
     "WebSocketClient",

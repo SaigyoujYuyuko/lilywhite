@@ -7,6 +7,7 @@ from ..health import HealthCenter
 from ..lifecycle import ManagedComponent
 from ..metrics import RequestMetrics
 from ..observability import LogStream
+from ..utils.registry import ManagedRegistrySelection
 from .container import create_container
 from .lifespan import LifespanManager
 
@@ -20,10 +21,12 @@ class ApplicationRuntime:
         *,
         resources: Mapping[type[object], object] | None = None,
         business_package: str | None = None,
+        managed_registries: ManagedRegistrySelection = (),
     ) -> None:
         """创建运行时并自动注册当前业务包与框架组件。"""
         self.business_package = business_package
         self.properties = properties
+        self.managed_registries = managed_registries
         self.health_center = HealthCenter()
         self.request_metrics = RequestMetrics(properties.operations.metrics_window_size)
         self.cors_allow_origins = properties.server.cors.allow_origins
@@ -36,6 +39,7 @@ class ApplicationRuntime:
             properties=properties,
             business_package=business_package,
             resources=runtime_resources,
+            managed_registries=managed_registries,
         )
         self.lifespan = LifespanManager()
         self.lifespan.register("health", "START")(self.health_center.start)

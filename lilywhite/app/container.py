@@ -26,7 +26,7 @@ from ..lifecycle import (
 )
 from ..logger import LoggerManager
 from ..qualifier import Qualifier, qualifier_name
-from ..utils.registry import LifetimeType
+from ..utils.registry import LifetimeType, ManagedRegistrySelection
 from .discovery import import_decorated_modules, import_package_modules
 
 log = LoggerManager.get_logger("DI")
@@ -568,15 +568,20 @@ def create_container(
     properties: AppProperties | None = None,
     business_package: str | None = None,
     resources: Mapping[type[object], object] | None = None,
+    managed_registries: ManagedRegistrySelection = (),
 ) -> DependencyContainer:
-    """自动收集装饰器，按普通组件、Bean、后备组件的顺序构造依赖图。"""
+    """自动收集框架与托管注册表装饰器，再构造依赖图。"""
     package_names = ("lilywhite",) if business_package is None else ("lilywhite", business_package)
     log.debug("dependency container scan start business_package={}", business_package)
     properties = properties or AppProperties()
     import_package_modules("lilywhite.utils")
     import_package_modules("lilywhite.services")
     if business_package is not None:
-        import_decorated_modules(business_package, properties=properties)
+        import_decorated_modules(
+            business_package,
+            properties=properties,
+            managed_registries=managed_registries,
+        )
 
     container = DependencyContainer(package_names=package_names)
     container.register_instance(AppProperties, properties)

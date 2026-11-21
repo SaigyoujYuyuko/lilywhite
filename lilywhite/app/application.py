@@ -10,6 +10,7 @@ from litestar.types import ExceptionHandler
 from ..banner import server_url
 from ..config import AppProperties
 from ..logger import LoggerManager
+from ..utils.registry import ManagedRegistrySelection
 from .exception_hooks import install_exception_hooks
 from .http import create_http_app
 from .runtime import ApplicationRuntime
@@ -25,6 +26,7 @@ class LilyWhiteApplication:
         resources: Mapping[type[object], object] | None = None,
         controller_packages: tuple[str, ...] = ("lilywhite.controller",),
         business_package: str | None = None,
+        managed_registries: ManagedRegistrySelection = (),
         application_name: str = "LilyWhite Application",
         external_server: bool = False,
         exception_handlers: Mapping[int | type[Exception], ExceptionHandler[Exception]] | None = None,
@@ -45,6 +47,7 @@ class LilyWhiteApplication:
             properties,
             resources=resources,
             business_package=business_package,
+            managed_registries=managed_registries,
         )
         self.container = self._runtime.container
         self.health_center = self._runtime.health_center

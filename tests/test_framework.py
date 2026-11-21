@@ -238,3 +238,13 @@ def test_override_logger_factory_updates_existing_reference_and_exception() -> N
     assert [record.name for record in collector.records] == ["custom.factory", "custom.factory"]
     assert collector.records[0].getMessage() == "hello world"
     assert collector.records[1].exc_info == (ValueError, error, None)
+
+
+def test_default_openapi_uses_litestar_default_configuration() -> None:
+    """未显式传 OpenAPI 配置时应保留 Litestar 默认文档，而不是关闭。"""
+    application = LilyWhiteApplication(ExampleProperties(), controller_packages=()).create_app()
+
+    with TestClient(application) as client:
+        response = client.get("/schema/openapi.json")
+
+    assert response.status_code == 200

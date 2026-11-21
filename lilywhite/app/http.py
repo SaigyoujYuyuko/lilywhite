@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping
 from contextlib import AbstractAsyncContextManager
 
 from litestar import Litestar
+from litestar.app import DEFAULT_OPENAPI_CONFIG
 from litestar.config.cors import CORSConfig
 from litestar.middleware import DefineMiddleware
 from litestar.openapi.config import OpenAPIConfig
@@ -37,7 +38,11 @@ def create_http_app(
     if runtime.business_package is not None:
         route_handlers.extend(
             (
-                *discover_business_controllers(runtime.business_package, properties=runtime.properties),
+                *discover_business_controllers(
+                    runtime.business_package,
+                    properties=runtime.properties,
+                    managed_registries=runtime.managed_registries,
+                ),
                 *discover_websocket_controllers(runtime.business_package),
             )
         )
@@ -51,7 +56,7 @@ def create_http_app(
         ],
         before_request=RequestMetricsHooks(runtime.request_metrics).before_request,
         exception_handlers=dict(exception_handlers or {}),
-        openapi_config=openapi_config,
+        openapi_config=openapi_config or DEFAULT_OPENAPI_CONFIG,
         cors_config=(
             CORSConfig(allow_origins=list(runtime.cors_allow_origins)) if runtime.cors_allow_origins else None
         ),

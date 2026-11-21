@@ -74,3 +74,19 @@ class Registry[T: Named | type[object]]:
         for k, v in self._data.items():
             if k.startswith(prefix):
                 yield v
+
+
+class ManagedRegistry[T: Named | type[object]](Registry[T]):
+    """声明一个业务装饰器及其来源，供入口显式加入静态发现。"""
+
+    def __init__(self, decorator: str, source: str) -> None:
+        super().__init__()
+        if not decorator.isidentifier():
+            raise ValueError("托管注册表装饰器名称必须是合法 Python 标识符")
+        if not source or source != source.strip():
+            raise ValueError("托管注册表来源必须是非空模块路径")
+        self.decorator_name = decorator
+        self.source = source
+
+
+type ManagedRegistrySelection = tuple[ManagedRegistry[Named | type[object]], ...]

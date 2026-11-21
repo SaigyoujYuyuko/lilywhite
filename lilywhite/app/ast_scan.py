@@ -15,7 +15,7 @@ class StaticScanError(ValueError):
 
 @dataclass(frozen=True)
 class DecoratedClass:
-    """一个模块级类及其命中的装饰器和静态条件表达式。"""
+    """一个模块级类或函数及其命中的装饰器和静态条件表达式。"""
 
     module: str
     class_name: str
@@ -32,7 +32,7 @@ class ASTScanner:
         self._sources = sources
 
     def scan_package(self, package_name: str) -> tuple[DecoratedClass, ...]:
-        """递归解析包内源码，返回所有匹配的模块级类。"""
+        """递归解析包内源码，返回所有匹配的模块级类或函数。"""
         package = import_module(package_name)
         spec = package.__spec__
         if spec is None or spec.submodule_search_locations is None:
@@ -58,19 +58,23 @@ class ASTScanner:
         except SyntaxError as error:
             raise StaticScanError(f"无法解析业务源码 {source}:{error.lineno}：{error.msg}") from error
 
-        decorators, modules = self._import_aliases(tree)
+        decorators, modules = self._import_aliases(tree, module_name, source.name == "__init__.py")
         discovered: list[DecoratedClass] = []
-        for class_node in tree.body:
-            if not isinstance(class_node, ast.ClassDef):
+        for target_node in tree.body:
+            if not isinstance(target_node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
-            condition = self._class_condition(class_node, decorators, modules)
-            for decorator_node in class_node.decorator_list:
+            condition = (
+                self._class_condition(target_node, decorators, modules)
+                if isinstance(target_node, ast.ClassDef)
+                else None
+            )
+            for decorator_node in target_node.decorator_list:
                 name = self._decorator_name(decorator_node, decorators, modules)
                 if name is not None:
                     discovered.append(
                         DecoratedClass(
                             module_name,
-                            class_node.name,
+                            target_node.name,
                             name,
                             decorator_node,
                             source,
@@ -79,8 +83,13 @@ class ASTScanner:
                     )
         return tuple(discovered)
 
-    def _import_aliases(self, tree: ast.Module) -> tuple[dict[str, str], dict[str, str]]:
-        """收集模块级导入中的装饰器别名和模块别名。"""
+    def _import_aliases(
+        self,
+        tree: ast.Module,
+        module_name: str,
+        is_package: bool,
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        """收集绝对和相对导入中的装饰器别名与模块别名。"""
         decorators: dict[str, str] = {}
         modules: dict[str, str] = {}
         for node in tree.body:
@@ -92,10 +101,23 @@ class ASTScanner:
                             modules[local_name] = prefix if alias.asname is None else alias.name
                             break
             elif isinstance(node, ast.ImportFrom) and node.module is not None:
+                source = self._absolute_import(node, module_name, is_package)
                 for alias in node.names:
-                    if alias.name in self._sources and node.module in self._sources[alias.name]:
+                    if alias.name in self._sources and source in self._sources[alias.name]:
                         decorators[alias.asname or alias.name] = alias.name
         return decorators, modules
+
+    @staticmethod
+    def _absolute_import(node: ast.ImportFrom, module_name: str, is_package: bool) -> str:
+        """把相对导入还原成与托管注册表声明一致的绝对模块路径。"""
+        if node.level == 0:
+            return node.module or ""
+        parts = module_name.split(".") if is_package else module_name.split(".")[:-1]
+        if node.level > 1:
+            parts = parts[: -(node.level - 1)]
+        if node.module:
+            parts.extend(node.module.split("."))
+        return ".".join(parts)
 
     def _module_prefixes(self) -> set[str]:
         """从装饰器来源推导需要跟踪的顶层模块。"""
