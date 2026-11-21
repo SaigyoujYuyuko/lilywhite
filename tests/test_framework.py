@@ -25,7 +25,7 @@ def test_greeting_uses_complete_dependency_injection_chain() -> None:
         response = client.get("/api/v1/greetings/Lily")
 
     assert response.status_code == 200
-    assert response.json()["body"]["message"] == "你好，Lily！lilywhite 模板已经运行。"
+    assert response.json()["message"] == "你好，Lily！lilywhite 模板已经运行。"
 
 
 def test_spring_greeting_can_be_enabled_by_configuration() -> None:
@@ -41,7 +41,7 @@ def test_spring_greeting_can_be_enabled_by_configuration() -> None:
         response = client.get("/api/v1/greetings/Lily")
 
     assert response.status_code == 200
-    assert response.json()["body"]["message"] == "春が来た，Lily！LilyWhite 与你同在。"
+    assert response.json()["message"] == "春が来た，Lily！LilyWhite 与你同在。"
 
 
 def test_main_marks_entry_and_injects_asgi_call() -> None:

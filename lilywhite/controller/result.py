@@ -1,30 +1,24 @@
-"""Controller 统一的 HTTP 结果构造。"""
+"""Controller 的 HTTP 响应构造工具。"""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import msgspec
 from litestar import Response
 from litestar.enums import MediaType
 from litestar.response.sse import ServerSentEvent, ServerSentEventMessage
 
-from ..domain.json import as_json_object
-from ..observability import LogEvent
-
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 type JsonObject = dict[str, JsonValue]
+type ResponseContent[T] = T | dict[str, object] | None
 
 
-class HttpResult(msgspec.Struct, frozen=True):
-    """统一 HTTP JSON 响应信封，body 在构造时完成动态值收窄。"""
-
-    status: int
-    body: object | None
-    error_message: str
-
-    def __post_init__(self) -> None:
-        """验证动态body，同时让OpenAPI将其生成为自由JSON对象。"""
-        if self.body is not None:
-            as_json_object(self.body)
+def _response_content[T](content: T | None, params: dict[str, object]) -> ResponseContent[T]:
+    """选择完整响应模型或关键字字段，拒绝两种内容来源混用。"""
+    if content is not None and params:
+        raise ValueError("content 与关键字响应字段不能同时传入")
+    if params:
+        return params
+    return content
 
 
 def response[T](
@@ -38,48 +32,65 @@ def response[T](
     return Response(content, status_code=status, headers=headers, media_type=media_type)
 
 
-def log_stream(events: AsyncIterator[LogEvent | None]) -> ServerSentEvent:
-    """把日志订阅编码为带心跳和重连提示的SSE响应。"""
+def stream[T](
+    events: AsyncIterator[T | None],
+    *,
+    event_type: str = "message",
+    event_id: Callable[[T], str | int | None] | None = None,
+    retry_duration: int = 3000,
+    headers: dict[str, str] | None = None,
+) -> ServerSentEvent:
+    """把任意事件流编码为 SSE，空事件作为注释心跳。"""
 
     async def messages() -> AsyncIterator[ServerSentEventMessage]:
-        """将日志模型转换为事件，将空事件转换为注释心跳。"""
+        """编码事件数据，并按需附加事件 ID。"""
         async for event in events:
             if event is None:
                 yield ServerSentEventMessage(comment="keep-alive")
             else:
                 yield ServerSentEventMessage(
                     data=msgspec.json.encode(event),
-                    event="log",
-                    id=event.id,
+                    event=event_type,
+                    id=event_id(event) if event_id is not None else None,
                 )
 
     return ServerSentEvent(
         messages(),
-        event_type="log",
-        retry_duration=3000,
-        headers={"Cache-Control": "no-store"},
+        event_type=event_type,
+        retry_duration=retry_duration,
+        headers=headers if headers is not None else {"Cache-Control": "no-store"},
     )
 
 
-def ok(body: JsonObject | None = None, *, status: int = 200) -> Response[HttpResult]:
-    """返回禁止缓存的成功响应。"""
+def ok[T](
+    content: T | None = None,
+    *,
+    status: int = 200,
+    **params: object,
+) -> Response[ResponseContent[T]]:
+    """返回成功响应，内容可以是完整模型或关键字字段。"""
     return response(
-        HttpResult(status=0, body=body, error_message=""),
+        _response_content(content, params),
         status=status,
         headers={"Cache-Control": "no-store"},
     )
 
 
-def created(body: JsonObject | None = None, *, headers: dict[str, str] | None = None) -> Response[HttpResult]:
+def created[T](
+    content: T | None = None,
+    *,
+    headers: dict[str, str] | None = None,
+    **params: object,
+) -> Response[ResponseContent[T]]:
     """返回201已创建响应和可选资源位置。"""
-    result = ok(body, status=201)
+    result = ok(content, status=201, **params)
     result.headers.update(headers or {})
     return result
 
 
-def accepted(body: JsonObject | None = None) -> Response[HttpResult]:
+def accepted[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 202 已接受响应。"""
-    return ok(body, status=202)
+    return ok(content, status=202, **params)
 
 
 def no_content() -> Response[None]:
@@ -87,85 +98,89 @@ def no_content() -> Response[None]:
     return response(None, status=204, headers={"Cache-Control": "no-store"})
 
 
-def http_error(status: int = 400, message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
-    """返回使用相同 HTTP 状态和业务状态的错误响应。"""
+def http_error[T](
+    status: int = 400,
+    content: T | None = None,
+    **params: object,
+) -> Response[ResponseContent[T]]:
+    """返回指定 HTTP 状态和业务内容的错误响应。"""
     return response(
-        HttpResult(status=status, body=body, error_message=message),
+        _response_content(content, params),
         status=status,
         headers={"Cache-Control": "no-store"},
     )
 
 
-def bad_request(message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
+def bad_request[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 400 请求错误。"""
-    return http_error(400, message, body)
+    return http_error(400, content, **params)
 
 
-def unauthorized(message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
+def unauthorized[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 401 未授权响应和 Bearer 挑战。"""
-    result = http_error(401, message, body)
+    result = http_error(401, content, **params)
     result.headers["WWW-Authenticate"] = "Bearer"
     return result
 
 
-def forbidden(message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
+def forbidden[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 403 禁止访问响应。"""
-    return http_error(403, message, body)
+    return http_error(403, content, **params)
 
 
-def not_found(message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
+def not_found[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 404 资源不存在响应。"""
-    return http_error(404, message, body)
+    return http_error(404, content, **params)
 
 
-def method_not_allowed(
-    message: str = "",
-    body: JsonObject | None = None,
+def method_not_allowed[T](
+    content: T | None = None,
     *,
     allow: str | None = None,
-) -> Response[HttpResult]:
+    **params: object,
+) -> Response[ResponseContent[T]]:
     """返回 405 方法不允许响应。"""
-    result = http_error(405, message, body)
+    result = http_error(405, content, **params)
     if allow is not None:
         result.headers["Allow"] = allow
     return result
 
 
-def conflict(message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
+def conflict[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 409 资源冲突响应。"""
-    return http_error(409, message, body)
+    return http_error(409, content, **params)
 
 
-def payload_too_large(message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
+def payload_too_large[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 413 请求体过大响应。"""
-    return http_error(413, message, body)
+    return http_error(413, content, **params)
 
 
-def unsupported_media_type(message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
+def unsupported_media_type[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 415 媒体类型不支持响应。"""
-    return http_error(415, message, body)
+    return http_error(415, content, **params)
 
 
-def too_many_requests(message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
+def too_many_requests[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 429 请求过多响应。"""
-    return http_error(429, message, body)
+    return http_error(429, content, **params)
 
 
-def internal_server_error(message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
+def internal_server_error[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 500 服务器内部错误响应。"""
-    return http_error(500, message, body)
+    return http_error(500, content, **params)
 
 
-def not_implemented(message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
+def not_implemented[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 501 功能未实现响应。"""
-    return http_error(501, message, body)
+    return http_error(501, content, **params)
 
 
-def bad_gateway(message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
+def bad_gateway[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 502 错误网关响应。"""
-    return http_error(502, message, body)
+    return http_error(502, content, **params)
 
 
-def service_unavailable(message: str = "", body: JsonObject | None = None) -> Response[HttpResult]:
+def service_unavailable[T](content: T | None = None, **params: object) -> Response[ResponseContent[T]]:
     """返回 503 服务不可用响应。"""
-    return http_error(503, message, body)
+    return http_error(503, content, **params)

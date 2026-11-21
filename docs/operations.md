@@ -10,24 +10,20 @@ GET /healthz
 
 ```json
 {
-  "status": 0,
-  "body": {
-    "status": "healthy",
-    "uptime_seconds": 12.3,
-    "components": {
-      "log_stream": {
-        "healthy": true,
-        "detail": ""
-      }
-    },
-    "requests": {
-      "active_requests": 0,
-      "total_requests": 8,
-      "error_count": 0,
-      "error_rate": 0.0
+  "status": "healthy",
+  "uptime_seconds": 12.3,
+  "components": {
+    "log_stream": {
+      "healthy": true,
+      "detail": ""
     }
   },
-  "error_message": ""
+  "requests": {
+    "active_requests": 0,
+    "total_requests": 8,
+    "error_count": 0,
+    "error_rate": 0.0
+  }
 }
 ```
 
@@ -76,9 +72,9 @@ curl -N \
 
 这条日志流读取的是 Loguru 记录。通过 `override_logger()` 接管框架日志后，自定义 Logger 的记录不会自动出现在这里；需要流式日志时，可以在自己的 Handler 中另行接入。
 
-## 统一 HTTP 响应
+## HTTP 响应
 
-`lilywhite.controller.result` 提供常用响应构造器：
+`lilywhite.controller.result` 提供常用响应构造器。关键字字段直接组成 JSON 对象，不需要额外写一层字典：
 
 ```python
 from lilywhite.controller.result import (
@@ -90,27 +86,51 @@ from lilywhite.controller.result import (
     ok,
 )
 
-return ok({"message": "春天来了"})
-return created({"id": 1})
-return accepted({"task_id": "spring-1"})
+return ok(message="春天来了")
+return created(id=1)
+return accepted(task_id="spring-1")
 return no_content()
-return bad_request("name is required")
-return not_found("sticker not found")
+return bad_request(message="name is required")
+return not_found(message="sticker not found")
 ```
 
-成功 JSON 使用统一信封：
+也可以传入字典或业务自己的响应模型，框架不会添加统一信封：
 
-```json
-{
-  "status": 0,
-  "body": {"message": "春天来了"},
-  "error_message": ""
-}
+```python
+import msgspec
+from lilywhite.controller.result import ok
+
+
+class GreetingResult(msgspec.Struct, frozen=True):
+    message: str
+
+
+return ok(GreetingResult(message="春天来了"))
+return ok({"message": "春天来了"})
 ```
 
-错误响应的 HTTP 状态和业务 `status` 保持一致，例如 400、404 或 429。成功和错误 JSON 默认带 `Cache-Control: no-store`。
+`content` 模型和关键字字段不能同时传入。成功和错误 JSON 默认带 `Cache-Control: no-store`；`created` 可以设置 `Location`，`unauthorized` 会携带 Bearer 挑战，`method_not_allowed` 可以设置 `Allow`。
 
-其他构造器还包括 `unauthorized`、`forbidden`、`method_not_allowed`、`conflict`、`payload_too_large`、`too_many_requests`、`internal_server_error`、`bad_gateway` 和 `service_unavailable`。
+其他构造器还包括 `forbidden`、`conflict`、`payload_too_large`、`too_many_requests`、`internal_server_error`、`bad_gateway` 和 `service_unavailable`。
+
+## SSE 事件流
+
+`stream()` 可以把任意可 JSON 编码的异步事件流返回为 Server-Sent Events，不依赖日志或其他业务模型：
+
+```python
+from collections.abc import AsyncIterator
+from lilywhite.controller.result import stream
+
+
+async def events() -> AsyncIterator[dict[str, object] | None]:
+    yield {"id": 1, "message": "春天来了"}
+    yield None  # 发送 keep-alive 心跳
+
+
+return stream(events(), event_type="greeting")
+```
+
+需要断线重连时，用 `event_id=lambda event: ...` 提供事件 ID；`retry_duration` 和 `headers` 也可以按业务调整。
 
 ## Service 业务结果
 

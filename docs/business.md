@@ -62,15 +62,14 @@ class GreetingController:
 
 ```python
 # my_app/web/greeting.py
-from typing import Annotated, cast
+from typing import Annotated
 
-import msgspec
 from litestar import Controller, Response, get
 from litestar.di import NamedDependency
 from litestar.params import FromPath
 
 from lilywhite import controller
-from lilywhite.controller.result import HttpResult, JsonObject, ok
+from lilywhite.controller.result import ok
 from ..logic.greeting import GreetingService
 
 @controller("/api/v1")
@@ -80,9 +79,9 @@ class GreetingController(Controller):
         self,
         name: Annotated[str, FromPath],
         greeting_service: NamedDependency[GreetingService],
-    ) -> Response[HttpResult]:
+    ) -> Response[object]:
         result = greeting_service.greet(name)
-        return ok(cast(JsonObject, msgspec.to_builtins(result.data)))
+        return ok(result.data)
 ```
 
 Controller 管 HTTP 参数和结果映射。Service 参数使用 `NamedDependency[具体Service]`，Litestar 会从 LilyWhite 容器提供的依赖表中取值。

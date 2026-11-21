@@ -1,14 +1,13 @@
 """问候业务Controller填空示例。"""
 
-from typing import Annotated, cast
+from typing import Annotated
 
-import msgspec
 from litestar import Controller, Response, get
 from litestar.di import NamedDependency
 from litestar.params import FromPath
 
 from lilywhite import controller
-from lilywhite.controller.result import HttpResult, JsonObject, ok
+from lilywhite.controller.result import ok
 
 from ..services.greeting import GreetingService
 
@@ -22,10 +21,10 @@ class GreetingController(Controller):
         self,
         name: Annotated[str, FromPath],
         greeting_service: NamedDependency[GreetingService],
-    ) -> Response[HttpResult]:
+    ) -> Response[object]:
         """返回指定名字的问候语。"""
         result = greeting_service.greet(name)
-        return ok(cast(JsonObject, msgspec.to_builtins(result.data)))
+        return ok(result.data)
 
 
 __all__ = ["GreetingController"]
