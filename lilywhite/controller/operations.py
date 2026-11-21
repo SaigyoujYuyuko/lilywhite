@@ -1,8 +1,5 @@
 """服务健康与请求指标 HTTP 入口。"""
 
-from typing import cast
-
-import msgspec
 from litestar import Controller, Request, Response, get
 from litestar.datastructures import State
 from litestar.di import NamedDependency
@@ -12,7 +9,7 @@ from ..decorators.controller import controller
 from ..health import HealthStatusType
 from ..services.health import HealthService
 from ..services.log import LogService
-from .result import JsonObject, not_found, ok, sse, too_many_requests, unauthorized
+from .result import not_found, ok, sse, too_many_requests, unauthorized
 
 
 @controller("/")
@@ -24,15 +21,13 @@ class OperationsController(Controller):
         """返回完整健康状态，非健康状态使用 503。"""
         result = health_service.get_health()
         status = 200 if result.data is not None and result.data.status is HealthStatusType.HEALTHY else 503
-        body = cast(JsonObject, msgspec.to_builtins(result.data))
-        return ok(body, status=status)
+        return ok(result.data, status=status)
 
     @get("/metrics")
     async def metrics(self, health_service: NamedDependency[HealthService]) -> Response[object]:
         """返回全局和每个路由模板的请求指标。"""
         result = health_service.get_metrics()
-        body = cast(JsonObject, msgspec.to_builtins(result.data))
-        return ok(body)
+        return ok(result.data)
 
     @get("/logs/stream")
     async def logs(

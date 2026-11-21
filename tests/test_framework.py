@@ -248,3 +248,25 @@ def test_default_openapi_uses_litestar_default_configuration() -> None:
         response = client.get("/schema/openapi.json")
 
     assert response.status_code == 200
+
+
+def test_operations_serialize_structs_without_recursive_json_aliases() -> None:
+    """运维接口应直接序列化 Struct，OpenAPI 不再包含递归 JSON 别名。"""
+    application = LilyWhiteApplication(
+        ExampleProperties(),
+        business_package="example",
+        application_name="LilyWhite Operations Test",
+    ).create_app()
+
+    with TestClient(application) as client:
+        health = client.get("/healthz")
+        metrics = client.get("/metrics")
+        schema = client.get("/schema/openapi.json")
+
+    assert health.status_code == 200
+    assert health.json()["status"] == "healthy"
+    assert "components" in health.json()
+    assert metrics.status_code == 200
+    assert "routes" in metrics.json()
+    assert schema.status_code == 200
+    assert "JsonValue" not in schema.text

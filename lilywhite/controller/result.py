@@ -9,8 +9,6 @@ from litestar.response import Stream
 from litestar.response.sse import ServerSentEvent, ServerSentEventMessage
 from litestar.types import StreamType
 
-type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
-type JsonObject = dict[str, JsonValue]
 type ResponseContent[T] = T | dict[str, object] | None
 type StreamContent = StreamType[str | bytes] | Callable[[], StreamType[str | bytes]]
 
