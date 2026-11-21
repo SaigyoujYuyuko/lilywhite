@@ -149,8 +149,9 @@ def import_decorated_modules(
     *,
     properties: AppProperties | None = None,
     managed_registries: ManagedRegistrySelection = (),
+    optional_imports: tuple[str, ...] = (),
 ) -> list[ModuleType]:
-    """只导入静态扫描和静态条件共同选中的模块。"""
+    """导入选中模块；仅未启用前缀允许跳过缺失依赖。"""
     imported: list[ModuleType] = []
     for module_name in scan_decorated_modules(
         package_name,
@@ -158,7 +159,19 @@ def import_decorated_modules(
         managed_registries=managed_registries,
     ):
         log.trace("module import module={}", module_name)
-        imported.append(import_module(module_name))
+        try:
+            imported.append(import_module(module_name))
+        except ModuleNotFoundError as error:
+            optional = any(
+                module_name == prefix or module_name.startswith(f"{prefix}.") for prefix in optional_imports
+            )
+            if not optional:
+                raise
+            log.warning(
+                "disabled module skipped because dependency is unavailable module={} missing={}",
+                module_name,
+                error.name or "unknown",
+            )
     return imported
 
 
@@ -215,12 +228,14 @@ def discover_business_controllers(
     *,
     properties: AppProperties | None = None,
     managed_registries: ManagedRegistrySelection = (),
+    optional_imports: tuple[str, ...] = (),
 ) -> list[type[Controller]]:
     """按同一份配置与托管注册表发现业务 Controller。"""
     import_decorated_modules(
         package_name,
         properties=properties,
         managed_registries=managed_registries,
+        optional_imports=optional_imports,
     )
     return _sorted_controllers(package_name)
 

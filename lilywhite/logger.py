@@ -227,6 +227,7 @@ def setup_logging(settings: ConfigSection, intercept_standard_logging: bool = Tr
     with contextlib.suppress(ValueError):
         logger.remove(0)
     logger.configure(extra={"module": "APP", "request_id": ""})
+    logger.level("WARNING", color="<fg 208>")
     _handlers["console"] = None
     _handlers["file"] = None
 

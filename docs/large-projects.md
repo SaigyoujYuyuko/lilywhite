@@ -89,3 +89,24 @@ class MySQLConfiguration:
 测试使用 `TestClient` 或 `AsyncTestClient` 的上下文管理器，确保真实启动和关闭都执行。不要只调用路由函数，那无法验证 DI 和清理。
 
 同一进程可以创建多个 `LilyWhiteApplication`。全局装饰器注册表按 `business_package` 过滤，各应用持有独立容器、配置和生命周期；不要把运行状态写进装饰器类变量或模块全局单例。
+
+## 复杂条件的导入失败兜底
+
+无法静态判断的模块会先尝试导入。业务可以在入口按实际配置声明未启用模块前缀：
+
+```python
+@LilywhiteMain
+class MyApplication:
+    def optional_imports(self, properties: ProjectProperties) -> tuple[str, ...]:
+        backends = {
+            "postgres": "my_app.storage.postgres",
+            "sqlite": "my_app.storage.sqlite",
+        }
+        return tuple(
+            package
+            for backend, package in backends.items()
+            if backend not in properties.storage.enabled_backends
+        )
+```
+
+这些前缀内的模块只有发生 `ModuleNotFoundError` 时才记录 WARNING 并跳过。启用后端不应出现在返回元组中，其缺失依赖会继续抛出并进入 CRITICAL 异常 hook。`SyntaxError`、`RuntimeError` 和其他异常始终原样抛出，不会被可选前缀吞掉。手动组合 `LilyWhiteApplication` 时可传入静态 `optional_imports=(前缀, ...)`。

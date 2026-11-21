@@ -27,6 +27,7 @@ class LilyWhiteApplication:
         controller_packages: tuple[str, ...] = ("lilywhite.controller",),
         business_package: str | None = None,
         managed_registries: ManagedRegistrySelection = (),
+        optional_imports: tuple[str, ...] = (),
         application_name: str = "LilyWhite Application",
         external_server: bool = False,
         exception_handlers: Mapping[int | type[Exception], ExceptionHandler[Exception]] | None = None,
@@ -48,6 +49,7 @@ class LilyWhiteApplication:
             resources=resources,
             business_package=business_package,
             managed_registries=managed_registries,
+            optional_imports=optional_imports,
         )
         self.container = self._runtime.container
         self.health_center = self._runtime.health_center

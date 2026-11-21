@@ -22,11 +22,13 @@ class ApplicationRuntime:
         resources: Mapping[type[object], object] | None = None,
         business_package: str | None = None,
         managed_registries: ManagedRegistrySelection = (),
+        optional_imports: tuple[str, ...] = (),
     ) -> None:
         """创建运行时并自动注册当前业务包与框架组件。"""
         self.business_package = business_package
         self.properties = properties
         self.managed_registries = managed_registries
+        self.optional_imports = optional_imports
         self.health_center = HealthCenter()
         self.request_metrics = RequestMetrics(properties.operations.metrics_window_size)
         self.cors_allow_origins = properties.server.cors.allow_origins
@@ -40,6 +42,7 @@ class ApplicationRuntime:
             business_package=business_package,
             resources=runtime_resources,
             managed_registries=managed_registries,
+            optional_imports=optional_imports,
         )
         self.lifespan = LifespanManager()
         self.lifespan.register("health", "START")(self.health_center.start)

@@ -69,6 +69,19 @@ def _managed_registries(entry: object) -> ManagedRegistrySelection:
     return value
 
 
+def _optional_imports(entry: object, properties: AppProperties) -> tuple[str, ...]:
+    """读取当前配置下允许缺失依赖的禁用模块前缀。"""
+    try:
+        value = entry.optional_imports  # type: ignore[attr-defined]
+    except AttributeError:
+        return ()
+    if callable(value):
+        value = value(properties)
+    if not isinstance(value, tuple) or not all(isinstance(item, str) and item for item in value):
+        raise TypeError("入口类 optional_imports 必须返回非空模块前缀字符串元组")
+    return value
+
+
 def _print_entry_banner(
     main_type: type[object],
     properties: AppProperties,
@@ -130,6 +143,7 @@ def _create_application(
         controller_packages=("lilywhite.controller",),
         business_package=package,
         managed_registries=_managed_registries(entry),
+        optional_imports=_optional_imports(entry, properties),
         application_name=_application_name(main_type),
         external_server=external_server,
     )

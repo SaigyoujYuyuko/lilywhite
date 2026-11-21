@@ -569,6 +569,7 @@ def create_container(
     business_package: str | None = None,
     resources: Mapping[type[object], object] | None = None,
     managed_registries: ManagedRegistrySelection = (),
+    optional_imports: tuple[str, ...] = (),
 ) -> DependencyContainer:
     """自动收集框架与托管注册表装饰器，再构造依赖图。"""
     package_names = ("lilywhite",) if business_package is None else ("lilywhite", business_package)
@@ -581,6 +582,7 @@ def create_container(
             business_package,
             properties=properties,
             managed_registries=managed_registries,
+            optional_imports=optional_imports,
         )
 
     container = DependencyContainer(package_names=package_names)
