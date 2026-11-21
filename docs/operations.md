@@ -74,10 +74,10 @@ curl -N \
 
 ## HTTP 响应
 
-`lilywhite.controller.result` 提供常用响应构造器。关键字字段直接组成 JSON 对象，不需要额外写一层字典：
+`lilywhite.http.result` 提供常用响应构造器。关键字字段直接组成 JSON 对象，不需要额外写一层字典：
 
 ```python
-from lilywhite.controller.result import (
+from lilywhite.http.result import (
     accepted,
     bad_request,
     created,
@@ -98,7 +98,7 @@ return not_found(message="sticker not found")
 
 ```python
 import msgspec
-from lilywhite.controller.result import ok
+from lilywhite.http.result import ok
 
 
 class GreetingResult(msgspec.Struct, frozen=True):
@@ -119,7 +119,7 @@ return ok({"message": "春天来了"})
 
 ```python
 from collections.abc import AsyncIterator
-from lilywhite.controller.result import stream
+from lilywhite.http.result import stream
 
 
 async def chunks() -> AsyncIterator[str]:
@@ -138,7 +138,7 @@ return stream(chunks())
 
 ```python
 from collections.abc import AsyncIterator
-from lilywhite.controller.result import sse
+from lilywhite.http.result import sse
 
 
 async def events() -> AsyncIterator[dict[str, object] | None]:

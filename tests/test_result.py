@@ -9,7 +9,7 @@ from litestar.response import Stream
 from litestar.response.sse import ServerSentEvent
 from litestar.testing import TestClient
 
-from lilywhite.controller.result import created, ok, sse, stream, unauthorized
+from lilywhite.http.result import created, ok, sse, stream, unauthorized
 
 
 class CustomResult(msgspec.Struct, frozen=True):

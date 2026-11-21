@@ -7,9 +7,9 @@ from litestar.response.sse import ServerSentEvent
 
 from ..decorators.controller import controller
 from ..health import HealthStatusType
+from ..http.result import not_found, ok, sse, too_many_requests, unauthorized
 from ..services.health import HealthService
 from ..services.log import LogService
-from .result import not_found, ok, sse, too_many_requests, unauthorized
 
 
 @controller("/")

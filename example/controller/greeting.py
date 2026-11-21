@@ -7,7 +7,7 @@ from litestar.di import NamedDependency
 from litestar.params import FromPath
 
 from lilywhite import controller
-from lilywhite.controller.result import ok
+from lilywhite.http.result import ok
 
 from ..services.greeting import GreetingService
 
