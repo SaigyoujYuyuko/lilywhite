@@ -33,17 +33,9 @@ class ASTScanner:
 
     def scan_package(self, package_name: str) -> tuple[DecoratedClass, ...]:
         """递归解析包内源码，返回所有匹配的模块级类或函数。"""
-        package = import_module(package_name)
-        spec = package.__spec__
-        if spec is None or spec.submodule_search_locations is None:
-            raise TypeError(f"扫描目标不是包：{package_name}")
-
         discovered: list[DecoratedClass] = []
-        for location in spec.submodule_search_locations:
-            root = Path(location)
-            for source in sorted(root.rglob("*.py")):
-                module_name = self._module_name(package_name, root, source)
-                discovered.extend(self.scan_file(source, module_name))
+        for source, module_name in package_module_sources(package_name):
+            discovered.extend(self.scan_file(source, module_name))
         return tuple(
             sorted(
                 discovered,
@@ -53,10 +45,7 @@ class ASTScanner:
 
     def scan_file(self, source: Path, module_name: str) -> tuple[DecoratedClass, ...]:
         """扫描单个文件，不执行其中的类和装饰器。"""
-        try:
-            tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-        except SyntaxError as error:
-            raise StaticScanError(f"无法解析业务源码 {source}:{error.lineno}：{error.msg}") from error
+        tree = parse_python_source(source)
 
         decorators, modules = self._import_aliases(tree, module_name, source.name == "__init__.py")
         discovered: list[DecoratedClass] = []
@@ -183,6 +172,28 @@ class ASTScanner:
         return ".".join((package_name, *parts))
 
 
+def parse_python_source(source: Path) -> ast.Module:
+    """解析一个业务源码文件，并统一报告静态语法错误。"""
+    try:
+        return ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+    except SyntaxError as error:
+        raise StaticScanError(f"无法解析业务源码 {source}:{error.lineno}：{error.msg}") from error
+
+
+def package_module_sources(package_name: str) -> tuple[tuple[Path, str], ...]:
+    """只枚举包源码和模块名，不导入包内子模块。"""
+    package = import_module(package_name)
+    spec = package.__spec__
+    if spec is None or spec.submodule_search_locations is None:
+        raise TypeError(f"扫描目标不是包：{package_name}")
+    return tuple(
+        (source, ASTScanner._module_name(package_name, root, source))
+        for location in spec.submodule_search_locations
+        for root in (Path(location),)
+        for source in sorted(root.rglob("*.py"))
+    )
+
+
 def scan_decorated_classes(
     package_name: str,
     sources: DecoratorSources,
@@ -196,5 +207,7 @@ __all__ = [
     "DecoratedClass",
     "DecoratorSources",
     "StaticScanError",
+    "package_module_sources",
+    "parse_python_source",
     "scan_decorated_classes",
 ]

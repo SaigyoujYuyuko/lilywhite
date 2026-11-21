@@ -16,6 +16,7 @@ from ..decorators.websocket import registered_websocket_controllers
 from ..logger import LoggerManager
 from ..utils.registry import ManagedRegistrySelection
 from .ast_scan import DecoratedClass, StaticScanError, scan_decorated_classes
+from .managed_scan import scan_managed_registries
 
 StaticDiscoveryError = StaticScanError
 
@@ -80,7 +81,8 @@ def scan_decorated_modules(
     """筛选框架与托管注册表装饰器；静态条件全关时跳过模块。"""
     log.debug("static scan start package={}", package_name)
     grouped: dict[str, list[DecoratedClass]] = defaultdict(list)
-    sources = _sources_with_managed_registries(managed_registries)
+    declared_registries = (*scan_managed_registries(package_name), *managed_registries)
+    sources = _sources_with_managed_registries(declared_registries)
     for item in scan_decorated_classes(package_name, sources):
         if item.decorator != "enabled":
             grouped[item.module].append(item)

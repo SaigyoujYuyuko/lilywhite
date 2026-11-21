@@ -38,11 +38,7 @@ def test_managed_registry_discovers_module_level_function_decorators(
         encoding="utf-8",
     )
     (root / "application.py").write_text(
-        "from lilywhite import LilywhiteMain\n"
-        "from .registry import commands\n"
-        "@LilywhiteMain\n"
-        "class ManagedApplication:\n"
-        "    managed_registries = (commands,)\n",
+        "from lilywhite import LilywhiteMain\n@LilywhiteMain\nclass ManagedApplication:\n    pass\n",
         encoding="utf-8",
     )
     monkeypatch.syspath_prepend(str(tmp_path))
