@@ -113,6 +113,25 @@ return ok({"message": "春天来了"})
 
 其他构造器还包括 `forbidden`、`conflict`、`payload_too_large`、`too_many_requests`、`internal_server_error`、`bad_gateway` 和 `service_unavailable`。
 
+## 流式响应
+
+`stream()` 依次发送字符串或字节内容块，不添加 SSE 事件格式。同步和异步可迭代对象都可以使用：
+
+```python
+from collections.abc import AsyncIterator
+from lilywhite.controller.result import stream
+
+
+async def chunks() -> AsyncIterator[str]:
+    yield "春天"
+    yield "来了"
+
+
+return stream(chunks())
+```
+
+默认媒体类型是 `text/plain`，可以通过 `status`、`headers` 和 `media_type` 调整。文件下载等二进制响应可设置 `media_type="application/octet-stream"`。
+
 ## SSE 事件流
 
 `sse()` 可以把任意可 JSON 编码的异步事件流返回为 Server-Sent Events，不依赖日志或其他业务模型：

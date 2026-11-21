@@ -5,11 +5,14 @@ from collections.abc import AsyncIterator, Callable
 import msgspec
 from litestar import Response
 from litestar.enums import MediaType
+from litestar.response import Stream
 from litestar.response.sse import ServerSentEvent, ServerSentEventMessage
+from litestar.types import StreamType
 
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
 type JsonObject = dict[str, JsonValue]
 type ResponseContent[T] = T | dict[str, object] | None
+type StreamContent = StreamType[str | bytes] | Callable[[], StreamType[str | bytes]]
 
 
 def _response_content[T](content: T | None, params: dict[str, object]) -> ResponseContent[T]:
@@ -30,6 +33,17 @@ def response[T](
 ) -> Response[T]:
     """构造指定内容、状态码、Header 和媒体类型的响应。"""
     return Response(content, status_code=status, headers=headers, media_type=media_type)
+
+
+def stream(
+    content: StreamContent,
+    *,
+    status: int = 200,
+    headers: dict[str, str] | None = None,
+    media_type: MediaType | str = MediaType.TEXT,
+) -> Stream:
+    """把同步或异步内容块返回为普通流式 HTTP 响应。"""
+    return Stream(content, status_code=status, headers=headers, media_type=media_type)
 
 
 def sse[T](

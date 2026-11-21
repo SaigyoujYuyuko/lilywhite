@@ -1,14 +1,15 @@
-"""HTTP 响应内容、状态码、特殊响应头和 SSE 测试。"""
+"""HTTP 响应内容、状态码、特殊响应头、流式响应和 SSE 测试。"""
 
 from collections.abc import AsyncIterator
 
 import msgspec
 import pytest
 from litestar import Litestar, get
+from litestar.response import Stream
 from litestar.response.sse import ServerSentEvent
 from litestar.testing import TestClient
 
-from lilywhite.controller.result import created, ok, sse, unauthorized
+from lilywhite.controller.result import created, ok, sse, stream, unauthorized
 
 
 class CustomResult(msgspec.Struct, frozen=True):
@@ -53,6 +54,26 @@ def test_created_and_unauthorized_keep_status_and_special_headers() -> None:
     assert unauthorized_result.status_code == 401
     assert unauthorized_result.content == {"message": "Authentication required."}
     assert unauthorized_result.headers["WWW-Authenticate"] == "Bearer"
+
+
+def test_stream_sends_async_chunks_as_plain_http_body() -> None:
+    """普通流式响应应依次发送内容块，不添加 SSE 事件格式。"""
+
+    async def chunks() -> AsyncIterator[str]:
+        yield "春天"
+        yield "来了"
+
+    @get("/chunks")
+    async def chunk_endpoint() -> Stream:
+        return stream(chunks(), status=206, headers={"X-Content-Mode": "chunks"})
+
+    with TestClient(Litestar(route_handlers=[chunk_endpoint])) as client:
+        response = client.get("/chunks")
+
+    assert response.status_code == 206
+    assert response.text == "春天来了"
+    assert response.headers["Content-Type"].startswith("text/plain")
+    assert response.headers["X-Content-Mode"] == "chunks"
 
 
 def test_sse_encodes_arbitrary_models_and_heartbeats() -> None:
