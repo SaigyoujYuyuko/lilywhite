@@ -115,11 +115,11 @@ return ok({"message": "春天来了"})
 
 ## SSE 事件流
 
-`stream()` 可以把任意可 JSON 编码的异步事件流返回为 Server-Sent Events，不依赖日志或其他业务模型：
+`sse()` 可以把任意可 JSON 编码的异步事件流返回为 Server-Sent Events，不依赖日志或其他业务模型：
 
 ```python
 from collections.abc import AsyncIterator
-from lilywhite.controller.result import stream
+from lilywhite.controller.result import sse
 
 
 async def events() -> AsyncIterator[dict[str, object] | None]:
@@ -127,7 +127,7 @@ async def events() -> AsyncIterator[dict[str, object] | None]:
     yield None  # 发送 keep-alive 心跳
 
 
-return stream(events(), event_type="greeting")
+return sse(events(), event_type="greeting")
 ```
 
 需要断线重连时，用 `event_id=lambda event: ...` 提供事件 ID；`retry_duration` 和 `headers` 也可以按业务调整。

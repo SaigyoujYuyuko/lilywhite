@@ -8,7 +8,7 @@ from litestar import Litestar, get
 from litestar.response.sse import ServerSentEvent
 from litestar.testing import TestClient
 
-from lilywhite.controller.result import created, ok, stream, unauthorized
+from lilywhite.controller.result import created, ok, sse, unauthorized
 
 
 class CustomResult(msgspec.Struct, frozen=True):
@@ -55,7 +55,7 @@ def test_created_and_unauthorized_keep_status_and_special_headers() -> None:
     assert unauthorized_result.headers["WWW-Authenticate"] == "Bearer"
 
 
-def test_stream_encodes_arbitrary_models_and_heartbeats() -> None:
+def test_sse_encodes_arbitrary_models_and_heartbeats() -> None:
     """通用 SSE 应支持业务模型、自定义事件名、ID 和空事件心跳。"""
 
     async def events() -> AsyncIterator[CustomResult | None]:
@@ -64,7 +64,7 @@ def test_stream_encodes_arbitrary_models_and_heartbeats() -> None:
 
     @get("/events")
     async def event_endpoint() -> ServerSentEvent:
-        return stream(events(), event_type="greeting", event_id=lambda event: event.code)
+        return sse(events(), event_type="greeting", event_id=lambda event: event.code)
 
     with TestClient(Litestar(route_handlers=[event_endpoint])) as client:
         response = client.get("/events")

@@ -32,7 +32,7 @@ def response[T](
     return Response(content, status_code=status, headers=headers, media_type=media_type)
 
 
-def stream[T](
+def sse[T](
     events: AsyncIterator[T | None],
     *,
     event_type: str = "message",

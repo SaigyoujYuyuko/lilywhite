@@ -12,7 +12,7 @@ from ..decorators.controller import controller
 from ..health import HealthStatusType
 from ..services.health import HealthService
 from ..services.log import LogService
-from .result import JsonObject, not_found, ok, stream, too_many_requests, unauthorized
+from .result import JsonObject, not_found, ok, sse, too_many_requests, unauthorized
 
 
 @controller("/")
@@ -48,4 +48,4 @@ class OperationsController(Controller):
             if result.error is not None and result.error.code == "log_stream_busy":
                 return too_many_requests(message="Too many active log subscriptions.")
             return unauthorized(message="Authentication required.")
-        return stream(result.data.events(), event_type="log", event_id=lambda event: event.id)
+        return sse(result.data.events(), event_type="log", event_id=lambda event: event.id)
