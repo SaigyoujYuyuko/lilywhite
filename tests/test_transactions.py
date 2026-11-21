@@ -192,3 +192,68 @@ def test_transactional_rejects_sync_methods() -> None:
         @transactional
         def invalid(self: CheckoutService) -> None:
             pass
+
+
+def test_nested_success_commits_only_at_outermost_boundary() -> None:
+    """内层成功只退出当前边界，最外层成功时才提交一次。"""
+
+    async def exercise() -> None:
+        session = FakeSession()
+        unit_of_work = UnitOfWork(session)
+
+        async with unit_of_work:
+            session.events.append("outer write")
+            async with unit_of_work:
+                session.events.append("inner write")
+                assert "commit" not in session.events
+            session.events.append("after inner")
+
+        assert session.events == ["outer write", "inner write", "after inner", "commit"]
+
+    asyncio.run(exercise())
+
+
+def test_caught_inner_exception_still_rolls_back_entire_transaction() -> None:
+    """外层捕获内层异常也不能清除回滚标记，避免提交不完整业务。"""
+
+    async def exercise() -> None:
+        session = FakeSession()
+        unit_of_work = UnitOfWork(session)
+
+        async with unit_of_work:
+            session.events.append("outer write")
+            with contextlib.suppress(ValueError):
+                async with unit_of_work:
+                    session.events.append("inner write")
+                    raise ValueError("inner failed")
+            session.events.append("inner failure caught")
+            session.events.append("after inner")
+
+        assert session.events == [
+            "outer write",
+            "inner write",
+            "inner failure caught",
+            "after inner",
+            "rollback",
+        ]
+
+    asyncio.run(exercise())
+
+
+def test_unit_of_work_can_be_reused_after_rollback() -> None:
+    """最外层回滚后应清理事务状态，后续独立用例仍可正常提交。"""
+
+    async def exercise() -> None:
+        session = FakeSession()
+        unit_of_work = UnitOfWork(session)
+
+        with pytest.raises(ValueError, match="first failed"):
+            async with unit_of_work:
+                session.events.append("first write")
+                raise ValueError("first failed")
+        async with unit_of_work:
+            session.events.append("second write")
+
+        assert session.events == ["first write", "rollback", "second write", "commit"]
+
+    asyncio.run(exercise())

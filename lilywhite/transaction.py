@@ -34,10 +34,12 @@ class TransactionBoundary(Protocol):
 
 
 class UnitOfWork[T: TransactionSession]:
-    """把一次业务用例的提交和回滚集中在一个异步上下文中。"""
+    """让嵌套业务用例参与同一事务，并由最外层统一提交或回滚。"""
 
     def __init__(self, session: T) -> None:
         self._session = session
+        self._depth = 0
+        self._rollback_only = False
 
     @property
     def session(self) -> T:
@@ -45,7 +47,8 @@ class UnitOfWork[T: TransactionSession]:
         return self._session
 
     async def __aenter__(self) -> UnitOfWork[T]:
-        """进入业务事务；事务资源由调用方的依赖作用域持有。"""
+        """进入或加入业务事务；事务资源由调用方的依赖作用域持有。"""
+        self._depth += 1
         return self
 
     async def __aexit__(
@@ -54,16 +57,25 @@ class UnitOfWork[T: TransactionSession]:
         _exc_value: BaseException | None,
         _traceback: TracebackType | None,
     ) -> bool:
-        """无异常时提交，业务异常或提交失败时回滚；Session 由依赖作用域关闭。"""
+        """内层只退出事务边界，最外层根据完整执行结果提交或回滚。"""
+        self._depth -= 1
         if exc_type is not None:
-            await self._session.rollback()
+            self._rollback_only = True
+        if self._depth > 0:
             return False
+
         try:
-            await self._session.commit()
-        except BaseException:
-            await self._session.rollback()
-            raise
-        return False
+            if self._rollback_only:
+                await self._session.rollback()
+                return False
+            try:
+                await self._session.commit()
+            except BaseException:
+                await self._session.rollback()
+                raise
+            return False
+        finally:
+            self._rollback_only = False
 
 
 __all__ = ["TransactionBoundary", "TransactionSession", "UnitOfWork"]
