@@ -28,7 +28,7 @@ class ExampleApplication:
     """声明示例元数据、业务配置类型和生命周期钩子。"""
 
     application_name = "LilyWhite Greeting Example"
-    application_version = "2.0.0"
+    application_version = "2.1.0"
     properties_type = ExampleProperties
 
     # def banner(self) -> str:
