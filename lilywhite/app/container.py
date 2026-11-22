@@ -12,6 +12,7 @@ from litestar.di import Provide
 
 from ..config import AppProperties
 from ..decorators import component as component_registrations
+from ..decorators import exception_handler as exception_handler_registrations
 from ..decorators import repository as repository_registrations
 from ..decorators import service as service_registrations
 from ..decorators.conditional import condition_enabled
@@ -632,6 +633,8 @@ def create_container(
         )
     for target, instance in (resources or {}).items():
         container.register_instance(target, instance)
+    for handler_type in exception_handler_registrations.registered_exception_handler_types(package_names):
+        container.register_component(handler_type, handler_type, LifetimeType.SINGLETON)
     for service_registration in service_registrations.registered_services(package_names):
         container.register_service(service_registration.service_type, service_registration.lifetime)
     container.build()

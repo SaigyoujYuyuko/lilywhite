@@ -113,6 +113,38 @@ return ok({"message": "春天来了"})
 
 其他构造器还包括 `forbidden`、`conflict`、`payload_too_large`、`too_many_requests`、`internal_server_error`、`bad_gateway` 和 `service_unavailable`。
 
+## 全局异常处理
+
+`@exception_handler(异常类型)` 注册独立处理函数。参数名可以自定义，但必须依次接收 `Request` 和对应异常，异常参数注解要与装饰器类型一致：
+
+```python
+from litestar import Request, Response
+from lilywhite import exception_handler
+from lilywhite.http.result import not_found
+
+
+@exception_handler(UserNotFoundError)
+def user_not_found(request: Request, error: UserNotFoundError) -> Response[object]:
+    return not_found(code="user_not_found", message=str(error))
+```
+
+需要集中管理时，把 `@exception_handler` 放在类上。类中的每个公开方法从异常参数注解确定映射，私有方法仍可作为普通辅助函数：
+
+```python
+@exception_handler
+class BusinessExceptionHandlers:
+    def __init__(self, messages: ErrorMessageService) -> None:
+        self.messages = messages
+
+    def user_not_found(self, request: Request, error: UserNotFoundError) -> Response[object]:
+        return not_found(code="user_not_found", message=self.messages.describe(error))
+
+    def invalid_input(self, request: Request, error: InvalidInputError) -> Response[object]:
+        return bad_request(code="invalid_input", message=str(error))
+```
+
+处理器组是 Singleton，由 DI 容器构造，可以注入其他 Singleton 配置或 Service。所有处理器必须是同步函数并注解返回 `Response`；不支持 async 异常处理器。缺少类型、签名不符、同一异常存在多个处理器都会在启动阶段报错。手动组合应用时，`LilyWhiteApplication(exception_handlers={...})` 仍可显式覆盖装饰器映射。
+
 ## 流式响应
 
 `stream()` 依次发送字符串或字节内容块，不添加 SSE 事件格式。同步和异步可迭代对象都可以使用：

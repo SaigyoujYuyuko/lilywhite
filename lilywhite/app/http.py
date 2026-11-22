@@ -2,6 +2,7 @@
 
 from collections.abc import Callable, Mapping
 from contextlib import AbstractAsyncContextManager
+from typing import cast
 
 from litestar import Litestar
 from litestar.app import DEFAULT_OPENAPI_CONFIG
@@ -10,12 +11,32 @@ from litestar.middleware import DefineMiddleware
 from litestar.openapi.config import OpenAPIConfig
 from litestar.types import ExceptionHandler
 
+from ..decorators.exception_handler import registered_exception_handlers
 from ..http.middleware.metrics import RequestMetricsHooks, RequestMetricsMiddleware
 from .discovery import discover_business_controllers, discover_controllers, discover_websocket_controllers
 from .runtime import ApplicationRuntime
 from .scope import RequestScopeMiddleware
 
 type ApplicationLifespan = Callable[[Litestar], AbstractAsyncContextManager[None]]
+
+
+def _registered_exception_handlers(
+    runtime: ApplicationRuntime,
+) -> dict[int | type[Exception], ExceptionHandler[Exception]]:
+    """绑定独立函数和 DI 处理器组，形成 Litestar 异常映射。"""
+    if runtime.business_package is None:
+        return {}
+    handlers: dict[int | type[Exception], ExceptionHandler[Exception]] = {}
+    for registration in registered_exception_handlers((runtime.business_package,)):
+        handler = registration.handler
+        owner_type = registration.owner_type
+        if owner_type is not None:
+            owner = runtime.container.resolve(owner_type)
+            bound = handler.__get__(owner, owner_type)
+            handlers[registration.exception_type] = cast("ExceptionHandler[Exception]", bound)
+        else:
+            handlers[registration.exception_type] = cast("ExceptionHandler[Exception]", handler)
+    return handlers
 
 
 def create_http_app(
@@ -47,6 +68,9 @@ def create_http_app(
                 *discover_websocket_controllers(runtime.business_package),
             )
         )
+    handlers: dict[int | type[Exception], ExceptionHandler[Exception]] = {}
+    handlers.update(_registered_exception_handlers(runtime))
+    handlers.update(exception_handlers or {})
     return Litestar(
         route_handlers=route_handlers,
         dependencies=runtime.container.litestar_dependencies(),
@@ -56,7 +80,7 @@ def create_http_app(
             DefineMiddleware(RequestScopeMiddleware, container=runtime.container),
         ],
         before_request=RequestMetricsHooks(runtime.request_metrics).before_request,
-        exception_handlers=dict(exception_handlers or {}),
+        exception_handlers=handlers,
         openapi_config=openapi_config or DEFAULT_OPENAPI_CONFIG,
         cors_config=(
             CORSConfig(allow_origins=list(runtime.cors_allow_origins)) if runtime.cors_allow_origins else None

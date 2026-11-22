@@ -24,6 +24,7 @@ log = LoggerManager.get_logger("DI")
 
 _DECORATOR_SOURCES = {
     "controller": frozenset({"lilywhite", "lilywhite.decorators.controller"}),
+    "exception_handler": frozenset({"lilywhite", "lilywhite.decorators.exception_handler"}),
     "websocket_controller": frozenset({"lilywhite", "lilywhite.decorators.websocket"}),
     "service": frozenset({"lilywhite", "lilywhite.decorators.service"}),
     "repository": frozenset({"lilywhite", "lilywhite.decorators.repository"}),

@@ -6,6 +6,7 @@ from .decorators.component import component
 from .decorators.configuration import bean, configuration
 from .decorators.conditional import enabled
 from .decorators.controller import controller
+from .decorators.exception_handler import exception_handler
 from .decorators.http import get, post, put, delete, patch
 from .decorators.repository import repository
 from .decorators.service import service
@@ -33,6 +34,7 @@ __all__ = [
     "configuration",
     "controller",
     "enabled",
+    "exception_handler",
     "override_logger",
     "repository",
     "run",
