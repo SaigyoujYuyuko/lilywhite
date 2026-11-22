@@ -13,7 +13,7 @@ from .registry import module_in_packages, qualified_name
 
 exception_handler_registry: Registry[ExceptionHandlerRegistration] = Registry()
 
-type ExceptionHandlerFunction = Callable[..., Response[object]]
+type ExceptionHandlerFunction[T, **P] = Callable[P, Response[T]]
 
 
 class ExceptionHandlerRegistration(msgspec.Struct, frozen=True):
@@ -30,26 +30,26 @@ class ExceptionHandlerRegistration(msgspec.Struct, frozen=True):
 
 
 @overload
-def exception_handler(  # type: ignore[overload-overlap]
+def exception_handler[T, **P](  # type: ignore[overload-overlap]
     exception_type: type[Exception], /
-) -> Callable[[ExceptionHandlerFunction], ExceptionHandlerFunction]: ...
+) -> Callable[[ExceptionHandlerFunction[T, P]], ExceptionHandlerFunction[T, P]]: ...
 
 
 @overload
 def exception_handler[T](handler_type: type[T], /) -> type[T]: ...
 
 
-def exception_handler[T](
+def exception_handler[T, R, **P](
     target: type[T],
     /,
-) -> type[T] | Callable[[ExceptionHandlerFunction], ExceptionHandlerFunction]:
+) -> type[T] | Callable[[ExceptionHandlerFunction[R, P]], ExceptionHandlerFunction[R, P]]:
     """注册单个异常处理函数，或注册一个由 DI 创建的异常处理器组。"""
     if not isinstance(target, type):
         raise TypeError("@exception_handler 函数形式必须显式提供异常类型")
     if issubclass(target, Exception):
         exception_type = target
 
-        def register(handler: ExceptionHandlerFunction) -> ExceptionHandlerFunction:
+        def register(handler: ExceptionHandlerFunction[R, P]) -> ExceptionHandlerFunction[R, P]:
             """校验并注册独立处理函数。"""
             if not isinstance(handler, FunctionType):
                 raise TypeError("@exception_handler 只能装饰普通函数")
