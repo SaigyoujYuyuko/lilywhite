@@ -365,8 +365,11 @@ class BusinessConfiguration:
 
 工厂 Bean 遵循这些规则：
 
-- 工厂方法使用同步函数，支持 `@bean`、`@bean()` 和 `@bean(name="...")`。
+- 工厂方法支持同步和 `async def`，以及 `@bean`、`@bean()` 和 `@bean(name="...")`。
+- 返回类型可以是 `UnitOfWork[AsyncSession]` 这类参数化泛型，注入时要使用一致的完整类型。
 - `lifetime=` 支持 Singleton、Scoped 和 Transient；默认 Singleton 在启动阶段预创建，其他 Bean 由请求或后台任务作用域创建。
+- 异步 Singleton 在应用 lifespan 启动时构造；手动使用容器时调用 `await container.build_async()`。
+- 异步 Scoped 和 Transient Bean 在 HTTP 请求中自动等待；后台任务使用 `await scope.resolve_async(TargetType)`。
 - `close=AsyncClient.aclose` 这类显式参数可适配第三方关闭方法；对象自身的 `initialize()` 仍会执行。
 - 同一返回类型和限定名的组合只能注册一次，不与 Component、Service 或其他 Bean 隐式竞争。
 - Scoped 和 Transient 资源在作用域末尾逆序释放，多个清理错误会汇总，不会因第一个错误停止。

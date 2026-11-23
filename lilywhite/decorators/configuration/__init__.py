@@ -1,4 +1,4 @@
-"""配置类与同步工厂 Bean 的显式注册装饰器。"""
+"""配置类与同步或异步工厂 Bean 的显式注册装饰器。"""
 
 from ._impl import (
     BeanFactory,

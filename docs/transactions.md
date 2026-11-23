@@ -34,7 +34,7 @@ class Persistence:
         return AsyncSession(engine, expire_on_commit=False)
 
     @bean(lifetime=LifetimeType.SCOPED)
-    def unit_of_work(self, session: AsyncSession) -> UnitOfWork:
+    def unit_of_work(self, session: AsyncSession) -> UnitOfWork[AsyncSession]:
         return UnitOfWork(session)
 ```
 
@@ -63,7 +63,7 @@ class BillingRepository:
 class CheckoutService:
     def __init__(
         self,
-        unit_of_work: UnitOfWork,
+        unit_of_work: UnitOfWork[AsyncSession],
         identity: IdentityRepository,
         billing: BillingRepository,
     ) -> None:

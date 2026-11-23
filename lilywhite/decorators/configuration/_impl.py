@@ -1,4 +1,4 @@
-"""配置类与同步工厂 Bean 的显式注册装饰器。（内部实现）"""
+"""配置类与同步或异步工厂 Bean 的显式注册装饰器。（内部实现）"""
 
 from collections.abc import Callable, Iterator
 from typing import overload
@@ -86,7 +86,7 @@ def bean[**P, R](
     lifetime: LifetimeType = LifetimeType.SINGLETON,
     close: ResourceCloser | None = None,
 ) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
-    """注册同步 Bean 工厂，并声明实例名称、生命周期和可选关闭适配器。"""
+    """注册同步或异步 Bean 工厂，并声明实例名称、生命周期和可选关闭适配器。"""
     qualifier = qualifier_name(name)
 
     def register(factory: Callable[P, R]) -> Callable[P, R]:

@@ -60,7 +60,7 @@ class Persistence:
         return FakeSession()
 
     @bean(lifetime=LifetimeType.SCOPED)
-    def unit_of_work(self, session: FakeSession) -> UnitOfWork:
+    def unit_of_work(self, session: FakeSession) -> UnitOfWork[FakeSession]:
         return UnitOfWork(session)
 
 
@@ -70,7 +70,7 @@ class CheckoutService:
 
     def __init__(
         self,
-        unit_of_work: UnitOfWork,
+        unit_of_work: UnitOfWork[FakeSession],
         identity: IdentityRepository,
         billing: BillingRepository,
     ) -> None:

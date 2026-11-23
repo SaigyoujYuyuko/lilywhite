@@ -226,3 +226,36 @@ def test_lifespan_collects_multiple_close_errors() -> None:
         assert [str(error) for error in captured.value.exceptions] == ["second close", "first close"]
 
     asyncio.run(exercise())
+
+
+def test_async_scoped_bean_uses_async_scope_resolution_and_closes() -> None:
+    """异步 Scoped 工厂应复用当前 Scope，并在结束时正常释放资源。"""
+
+    class AsyncSession:
+        def __init__(self) -> None:
+            self.closed = False
+
+        async def close(self) -> None:
+            self.closed = True
+
+    @configuration
+    class AsyncSessions:
+        @bean(lifetime=LifetimeType.SCOPED)
+        async def session(self) -> AsyncSession:
+            return AsyncSession()
+
+    async def exercise() -> None:
+        container = DependencyContainer()
+        instance = AsyncSessions()
+        container.register_bean(instance, instance.session, lifetime=LifetimeType.SCOPED)
+        container.build()
+        scope = container.create_scope()
+
+        first = await scope.resolve_async(AsyncSession)
+        second = await scope.resolve_async(AsyncSession)
+        assert first is second
+        assert not first.closed
+        await scope.close()
+        assert first.closed
+
+    asyncio.run(exercise())

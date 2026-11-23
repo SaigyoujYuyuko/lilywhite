@@ -1,5 +1,6 @@
 """@configuration 与 @bean 的依赖装配行为测试。"""
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -99,8 +100,8 @@ def test_duplicate_bean_return_type_is_rejected() -> None:
         container.register_bean(instance, instance.second_engine)
 
 
-def test_async_bean_factory_is_rejected_explicitly() -> None:
-    """第一版不使用异步工厂或隐式事件循环。"""
+def test_async_singleton_bean_factory_is_initialized_asynchronously() -> None:
+    """异步工厂及其下游 Singleton 应在异步构建阶段完成构造。"""
 
     @configuration
     class AsyncConfiguration:
@@ -108,11 +109,18 @@ def test_async_bean_factory_is_rejected_explicitly() -> None:
         async def engine(self) -> Engine:
             return Engine("async")
 
-    container = DependencyContainer()
-    instance = AsyncConfiguration()
-
-    with pytest.raises(DependencyInjectionException, match="必须是同步方法"):
+    async def exercise() -> None:
+        container = DependencyContainer()
+        instance = AsyncConfiguration()
         container.register_bean(instance, instance.engine)
+        container.build()
+
+        with pytest.raises(DependencyInjectionException, match="需要异步构造"):
+            container.resolve(Engine)
+        await container.build_async()
+        assert container.resolve(Engine).url == "async"
+
+    asyncio.run(exercise())
 
 
 def test_bean_factory_requires_concrete_return_type() -> None:

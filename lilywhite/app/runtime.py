@@ -44,19 +44,45 @@ class ApplicationRuntime:
             managed_registries=managed_registries,
             optional_imports=optional_imports,
         )
+        self._active_components: dict[str, ManagedComponent] = {}
         self.lifespan = LifespanManager()
         self.lifespan.register("health", "START")(self.health_center.start)
         self.lifespan.register("health", "STOP")(self.health_center.stop)
-        for name, component in self.container.managed_component_registrations():
-            self._register_component(name, component)
+        self.lifespan.register("dependency_container", "START")(self.container.build_async)
+        self.lifespan.register("components", "START")(self._start_components)
+        self.lifespan.register("components", "STOP")(self._stop_components)
 
-    def _register_component(self, name: str, component: ManagedComponent) -> None:
-        """按包含限定名的组件名称注册启动、关闭和健康状态。"""
-        self.lifespan.register(name, "START")(lambda: self._start_component(name, component))
-        self.lifespan.register(name, "STOP")(lambda: self._stop_component(name, component))
+    async def _start_components(self) -> None:
+        """在异步 Bean 就绪后启动全部组件，并回滚已经启动的部分。"""
+        try:
+            for name, component in self.container.managed_component_registrations():
+                await self._start_component(name, component)
+                self._active_components[name] = component
+        except Exception as start_error:
+            try:
+                await self._stop_components()
+            except Exception as stop_error:  # noqa: BLE001
+                raise ExceptionGroup(
+                    "组件启动失败后的资源回滚也失败", [start_error, stop_error]
+                ) from start_error
+            raise
+
+    async def _stop_components(self) -> None:
+        """逆序关闭当前已启动组件，并继续处理后续关闭错误。"""
+        errors: list[Exception] = []
+        for name in reversed(tuple(self._active_components)):
+            component = self._active_components.pop(name)
+            try:
+                await self._stop_component(name, component)
+            except Exception as error:  # noqa: BLE001
+                errors.append(error)
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise ExceptionGroup("组件关闭失败", errors)
 
     async def _start_component(self, name: str, component: ManagedComponent) -> None:
-        """初始化失败时先释放当前组件，再由 LifespanManager 回滚先前组件。"""
+        """初始化失败时先释放当前组件，再由统一分组回滚先前组件。"""
         try:
             await component.initialize()
         except Exception as start_error:
