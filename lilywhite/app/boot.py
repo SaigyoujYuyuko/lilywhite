@@ -1,6 +1,7 @@
 """LilyWhite 标志性入口装饰器、ASGI 适配与统一启动函数。"""
 
 import argparse
+import sys
 from pathlib import Path
 
 import uvicorn
@@ -99,13 +100,14 @@ def _print_entry_banner(
         content = custom_banner()
         if not isinstance(content, str):
             raise TypeError("入口类 banner() 必须返回字符串")
-        print(content)
+        print(content, file=sys.stderr, flush=True)
         return
     print_banner(
         _application_name(main_type),
         _application_version(main_type),
         None if external_server else properties.server.host,
         None if external_server else properties.server.port,
+        server_name="External ASGI Server" if external_server else "Uvicorn",
     )
     try:
         banner_message = entry.banner_message  # type: ignore[union-attr]
@@ -116,7 +118,7 @@ def _print_entry_banner(
     message = banner_message()
     if not isinstance(message, str):
         raise TypeError("入口类 banner_message() 必须返回字符串")
-    print(message)
+    print(message, file=sys.stderr, flush=True)
 
 
 def _create_application(

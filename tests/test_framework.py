@@ -68,10 +68,19 @@ def test_run_rejects_unmarked_entry_before_reading_configuration() -> None:
 def test_banner_contains_application_metadata_and_server_url() -> None:
     """Banner 必须展示应用名称、版本和实际配置的启动 URL。"""
     banner = render_banner("LilyWhite Test", "1.2.3", "127.0.0.1", 9527)
+    external = render_banner(
+        "LilyWhite Test",
+        "1.2.3",
+        None,
+        None,
+        server_name="External ASGI Server",
+    )
 
     assert "LilyWhite Test v1.2.3" in banner
     assert "http://127.0.0.1:9527" in banner
     assert "Bringing Spring to Python." in banner
+    assert "Litestar + Uvicorn" in banner
+    assert "Litestar + External ASGI Server" in external
 
 
 @pytest.mark.parametrize(
@@ -101,10 +110,10 @@ def test_default_banner_includes_optional_entry_message(capsys: pytest.CaptureFi
     main_module._print_entry_banner(MessageApplication, ExampleProperties(), entry=MessageApplication())
 
     captured = capsys.readouterr()
-    assert "Bringing Spring to Python." in captured.out
-    assert "Message Test v0.1.0" in captured.out
-    assert "http://127.0.0.1:8000" in captured.out
-    assert "HAVE A NICE DAY" in captured.out
+    assert "Bringing Spring to Python." in captured.err
+    assert "Message Test v0.1.0" in captured.err
+    assert "http://127.0.0.1:8000" in captured.err
+    assert "HAVE A NICE DAY" in captured.err
 
 
 def test_websocket_controller_receives_and_returns_messages() -> None:
@@ -141,8 +150,8 @@ def test_custom_entry_banner_replaces_default(
     run(CustomBannerApplication, ["--config", "config.example.yaml"])
 
     captured = capsys.readouterr()
-    assert "CUSTOM SPRING BANNER" in captured.out
-    assert "Bringing Spring to Python." not in captured.out
+    assert "CUSTOM SPRING BANNER" in captured.err
+    assert "Bringing Spring to Python." not in captured.err
 
 
 def test_entry_shutdown_hook_runs_after_real_lifespan() -> None:
