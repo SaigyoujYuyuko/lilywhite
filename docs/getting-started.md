@@ -39,7 +39,10 @@ WebSocket ws://127.0.0.1:8000/ws/echo
 
 ```bash
 uv add lilywhite
+uv run lilywhite init
 ```
+
+`lilywhite init` 会在当前目录生成默认 `config.yaml`。也可以指定路径：`uv run lilywhite init config/local.yaml`。已有文件默认拒绝覆盖，只有明确需要重建模板时才使用 `--force`。
 
 ### 目录
 

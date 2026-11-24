@@ -1,17 +1,24 @@
-"""通用模板的命令行与Uvicorn启动入口。"""
+"""LilyWhite 配置初始化与 Uvicorn 启动入口。"""
 
 import argparse
+import sys
 from pathlib import Path
 
 import uvicorn
 
 from .app import LilyWhiteApplication
+from .cli.config import init_config
 from .config import ConfigLoader
 from .logger import shutdown_logging
 
 
 def main(argv: list[str] | None = None) -> None:
-    """加载YAML，应用命令行覆盖并启动服务端。"""
+    """处理配置初始化命令，或加载 YAML 启动服务端。"""
+    arguments = sys.argv[1:] if argv is None else argv
+    if arguments and arguments[0] == "init":
+        init_config(arguments[1:])
+        return
+
     parser = argparse.ArgumentParser(description="LilyWhite Framework")
     parser.add_argument("--config", type=Path, default=Path("config.yaml"))
     parser.add_argument("--host")
@@ -23,7 +30,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--log-file", type=Path)
     parser.add_argument("--no-console", action="store_true")
-    args = parser.parse_args(argv)
+    args = parser.parse_args(arguments)
 
     properties = ConfigLoader(args.config).load()
     properties = properties.override(
