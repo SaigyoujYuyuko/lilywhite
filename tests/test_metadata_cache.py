@@ -71,3 +71,24 @@ def test_metadata_cache_is_not_shared_between_containers() -> None:
     assert first_root is not second_root
     assert first_root.leaf is not second_root.leaf
     assert first._constructor_metadata[CacheRoot] is not second._constructor_metadata[CacheRoot]
+
+
+def test_prepare_reuses_bindings_without_repository_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """首次图校验后，普通和限定依赖都不重复扫描 Repository 注册表。"""
+    container = DependencyContainer()
+    container.register_component(CacheLeaf, CacheLeaf, LifetimeType.SCOPED, name="current")
+    container.register_service(CacheRoot, LifetimeType.SCOPED)
+    container.build()
+
+    def unexpected_lookup(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("已绑定依赖不应再次读取 Repository 注册表")
+
+    monkeypatch.setattr(
+        container_module.repository_registrations, "registered_repositories", unexpected_lookup
+    )
+
+    first = container.create_scope().resolve(CacheRoot)
+    second = container.create_scope().resolve(CacheRoot)
+    assert first.leaf is not second.leaf

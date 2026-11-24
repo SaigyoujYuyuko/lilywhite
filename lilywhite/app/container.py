@@ -391,7 +391,13 @@ class DependencyContainer:
                 dependencies[name] = Provide(http_factory, use_cache=False, sync_to_thread=False)
 
     def _prepare(self, key: _DependencyKey) -> LifetimeType:
-        """按限定名选择目标实现；未命名注入仍要求唯一候选。"""
+        """复用已校验绑定；仅首次解析时检查候选和 Repository 注册表。"""
+        if key.qualifier is not None or key.target in self._checked_unqualified:
+            if key in self._instances:
+                return LifetimeType.SINGLETON
+            if key in self._lifetimes:
+                return self._lifetimes[key]
+
         repositories = (
             [
                 registration
