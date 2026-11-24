@@ -1,48 +1,83 @@
-"""根据框架默认配置生成项目配置模板。"""
+"""根据框架和业务默认配置生成项目配置模板。"""
 
 import argparse
 import sys
+from importlib import import_module
 from pathlib import Path
 
 import yaml
 
-from ..config import AppProperties
+from ..config import AppProperties, ConfigSection
 
 
-def default_config() -> dict[str, object]:
-    """从当前框架默认配置生成 YAML 映射，不包含示例业务分组。"""
-    properties = AppProperties()
+def _yaml_value(value: object) -> object:
+    """把配置默认值转换为 YAML 可表示的标量、列表或映射。"""
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, tuple | list):
+        return [_yaml_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _yaml_value(item) for key, item in value.items()}
+    return value
+
+
+def _section_values(section: ConfigSection) -> dict[str, object]:
+    """递归读取 ConfigSection，包括业务声明的嵌套配置段。"""
+    values: dict[str, object] = {}
+    for name, setting in section._settings.items():
+        values[name] = _yaml_value(setting.value)
+    for name, value in section.__dict__.items():
+        if isinstance(value, ConfigSection):
+            values[name] = _section_values(value)
+    return values
+
+
+def default_config(properties_type: type[AppProperties] = AppProperties) -> dict[str, object]:
+    """从指定配置类型生成 YAML 映射，不包含示例业务分组。"""
+    properties = properties_type()
     return {
-        "version": properties.version,
-        "server": {
-            "host": properties.server.host,
-            "port": properties.server.port,
-            "cors": {"allow_origins": list(properties.server.cors.allow_origins)},
-        },
-        "logging": {
-            "level": properties.logging.level,
-            "third_party_level": properties.logging.third_party_level,
-            "console": properties.logging.console,
-            "file": None if properties.logging.file is None else str(properties.logging.file),
-            "file_rotation_mb": properties.logging.file_rotation_mb,
-            "file_retention_days": properties.logging.file_retention_days,
-            "file_compression": properties.logging.file_compression,
-        },
-        "operations": {
-            "metrics_window_size": properties.operations.metrics_window_size,
-            "log_access_token": properties.operations.log_access_token,
-        },
+        name: _section_values(value) if isinstance(value, ConfigSection) else _yaml_value(value)
+        for name, value in properties.__dict__.items()
+        if not name.startswith("_")
     }
 
 
-def write_config(path: Path, *, force: bool = False) -> Path:
+def _entry_properties_type(reference: str) -> type[AppProperties]:
+    """按 module:Class 导入业务入口并读取 properties_type。"""
+    module_name, separator, class_name = reference.partition(":")
+    if not separator or not module_name or not class_name:
+        raise ValueError("--entry 必须使用 my_app.application:MyApplication 格式")
+    module = import_module(module_name)
+    try:
+        entry_type = module.__dict__[class_name]
+    except KeyError as error:
+        raise TypeError(f"入口类不存在：{reference}") from error
+    if not isinstance(entry_type, type):
+        raise TypeError(f"入口目标不是类：{reference}")
+    try:
+        properties_type = entry_type.properties_type  # type: ignore[attr-defined]
+    except AttributeError:
+        return AppProperties
+    if not isinstance(properties_type, type) or not issubclass(properties_type, AppProperties):
+        raise TypeError(f"入口 properties_type 必须是 AppProperties 子类：{reference}")
+    return properties_type
+
+
+def write_config(
+    path: Path,
+    *,
+    force: bool = False,
+    properties_type: type[AppProperties] = AppProperties,
+) -> Path:
     """写入默认配置模板；只有显式 force 才允许覆盖现有文件。"""
     destination = path.resolve()
     if destination.exists() and not force:
         raise FileExistsError(f"配置文件已存在：{destination}；需要覆盖时请使用 --force")
     destination.parent.mkdir(parents=True, exist_ok=True)
     rendered = "# LilyWhite 项目配置。按业务需要修改，敏感值只写入本地配置。\n" + yaml.safe_dump(
-        default_config(),
+        default_config(properties_type),
         allow_unicode=True,
         sort_keys=False,
     )
@@ -54,9 +89,11 @@ def init_config(argv: list[str] | None = None) -> None:
     """处理 lilywhite init 命令并输出创建的文件路径。"""
     parser = argparse.ArgumentParser(prog="lilywhite init", description="生成 LilyWhite 默认配置文件")
     parser.add_argument("path", nargs="?", type=Path, default=Path("config.yaml"))
+    parser.add_argument("--entry", help="业务入口，格式为 my_app.application:MyApplication")
     parser.add_argument("--force", action="store_true", help="覆盖已存在的配置文件")
     args = parser.parse_args(argv)
-    destination = write_config(args.path, force=args.force)
+    properties_type = AppProperties if args.entry is None else _entry_properties_type(args.entry)
+    destination = write_config(args.path, force=args.force, properties_type=properties_type)
     print(f"LilyWhite config created: {destination}", file=sys.stderr, flush=True)
 
 

@@ -14,7 +14,7 @@ uv run python -m my_app --config config.yaml
 version: 1
 ```
 
-其他字段都有默认值。执行 `lilywhite init` 可以生成一份不含业务分组的默认配置；仓库的 `config.example.yaml` 是完整公共示例，复制为 `config.yaml` 后再修改；本地配置不会进入 Git。
+其他字段都有默认值。执行 `lilywhite init` 可以生成一份不含业务分组的默认配置；加上 `--entry my_app.application:MyApplication` 后，也会生成入口 `properties_type` 中声明的业务配置段。仓库的 `config.example.yaml` 是完整公共示例，复制为 `config.yaml` 后再修改；本地配置不会进入 Git。
 
 ## 完整配置
 

@@ -44,6 +44,14 @@ uv run lilywhite init
 
 `lilywhite init` 会在当前目录生成默认 `config.yaml`。也可以指定路径：`uv run lilywhite init config/local.yaml`。已有文件默认拒绝覆盖，只有明确需要重建模板时才使用 `--force`。
 
+需要连同业务配置段一起生成时，显式提供入口类：
+
+```bash
+uv run lilywhite init --entry my_app.application:MyApplication
+```
+
+这会读取入口的 `properties_type`，把 `storage.enabled_backends` 等供 `@enabled` 使用的默认值也写进模板。
+
 ### 目录
 
 先准备下面四个文件。`web` 只是这里的名字，换成 `http` 或 `api` 也可以。
