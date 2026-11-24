@@ -2,17 +2,20 @@
 
 from collections.abc import Callable, Mapping
 from contextlib import AbstractAsyncContextManager
-from typing import cast
+from inspect import Parameter, signature
+from typing import cast, get_type_hints
 
 from litestar import Litestar
 from litestar.app import DEFAULT_OPENAPI_CONFIG
 from litestar.config.cors import CORSConfig
 from litestar.middleware import DefineMiddleware
 from litestar.openapi.config import OpenAPIConfig
-from litestar.types import ExceptionHandler
+from litestar.types import ASGIApp, ExceptionHandler
 
 from ..decorators.exception_handler import registered_exception_handlers
+from ..decorators.middleware import registered_middlewares
 from ..http.middleware.metrics import RequestMetricsHooks, RequestMetricsMiddleware
+from .container import DependencyContainer
 from .discovery import discover_business_controllers, discover_controllers, discover_websocket_controllers
 from .runtime import ApplicationRuntime
 from .scope import RequestScopeMiddleware
@@ -37,6 +40,38 @@ def _registered_exception_handlers(
         else:
             handlers[registration.exception_type] = cast("ExceptionHandler[Exception]", handler)
     return handlers
+
+
+def _middleware_dependencies(
+    container: DependencyContainer,
+    middleware_type: type[object],
+) -> dict[str, object]:
+    """除下一层 app 外，按构造器注解注入 Singleton 依赖。"""
+    constructor = middleware_type.__init__
+    hints = get_type_hints(constructor, include_extras=True)
+    dependencies: dict[str, object] = {}
+    for parameter in list(signature(constructor).parameters.values())[2:]:
+        location = f"{middleware_type.__module__}.{middleware_type.__qualname__}.{parameter.name}"
+        if parameter.kind not in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY):
+            raise TypeError(f"中间件依赖参数不受支持：{location}")
+        dependency = container._dependency_parameter(
+            hints.get(parameter.name), "中间件构造器参数", location, parameter.name
+        )
+        dependencies[parameter.name] = container._resolve_singleton(dependency.key)
+    return dependencies
+
+
+def _registered_middleware(runtime: ApplicationRuntime) -> list[DefineMiddleware]:
+    """按声明顺序把业务中间件转换为 Litestar DefineMiddleware。"""
+    if runtime.business_package is None:
+        return []
+    return [
+        DefineMiddleware(
+            cast("Callable[..., ASGIApp]", registration.middleware_type),
+            **_middleware_dependencies(runtime.container, registration.middleware_type),
+        )
+        for registration in registered_middlewares((runtime.business_package,))
+    ]
 
 
 def create_http_app(
@@ -78,6 +113,7 @@ def create_http_app(
         middleware=[
             DefineMiddleware(RequestMetricsMiddleware, metrics=runtime.request_metrics),
             DefineMiddleware(RequestScopeMiddleware, container=runtime.container),
+            *_registered_middleware(runtime),
         ],
         before_request=RequestMetricsHooks(runtime.request_metrics).before_request,
         exception_handlers=handlers,

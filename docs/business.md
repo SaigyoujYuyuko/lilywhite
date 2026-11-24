@@ -88,6 +88,34 @@ Controller 管 HTTP 参数和结果映射。Service 参数使用 `NamedDependenc
 
 裸写 `@controller` 时根路径是 `/`；带路径时必须以 `/` 开头。
 
+## 中间件
+
+`@middleware` 注册 ASGI 类中间件，构造器第一个参数接收下一层 `app`，其他参数按类型注入 Singleton 依赖：
+
+```python
+from litestar.types import ASGIApp, Receive, Scope, Send
+from lilywhite import middleware
+
+
+@middleware(order=100)
+class AuthMiddleware:
+    def __init__(self, app: ASGIApp, tokens: TokenService) -> None:
+        self.app = app
+        self.tokens = tokens
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        self.tokens.verify(scope)
+        await self.app(scope, receive, send)
+```
+
+支持裸写 `@middleware` 和 `@middleware(order=100)`。`order` 越小越先看到请求，响应沿相反顺序返回；同值按完整类名排序，不依赖模块导入顺序。内置指标和请求 Scope 中间件保持在业务中间件内侧。
+
+`__call__` 必须是 async，并接收 `scope / receive / send`。应用级中间件不能注入 Scoped 或 Transient 依赖；这些对象应改由 Controller 的 Scoped Service 使用。签名或生命周期不合法会在启动阶段报错。
+
 ## Service
 
 Service 的依赖直接写进构造器：

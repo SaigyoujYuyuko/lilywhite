@@ -8,6 +8,7 @@ from .decorators.conditional import enabled
 from .decorators.controller import controller
 from .decorators.exception_handler import exception_handler
 from .decorators.http import get, post, put, delete, patch
+from .decorators.middleware import middleware
 from .decorators.repository import repository
 from .decorators.service import service
 from .decorators.transactional import transactional
@@ -35,6 +36,7 @@ __all__ = [
     "controller",
     "enabled",
     "exception_handler",
+    "middleware",
     "override_logger",
     "repository",
     "run",

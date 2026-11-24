@@ -6,7 +6,7 @@
 
 - [快速上手](getting-started.md)：运行仓库示例，或者从零写一个带 HTTP 接口的应用。
 - [入口与应用生命周期](application.md)：`@LilywhiteMain`、启动参数、Banner、入口钩子和 ASGI。
-- [业务分层与依赖注入](business.md)：Controller、WebSocket、Service、Repository、Component、`@configuration` / `@bean` 和 AST 发现。
+- [业务分层与依赖注入](business.md)：Controller、中间件、WebSocket、Service、Repository、Component、`@configuration` / `@bean` 和 AST 发现。
 - [多实例与 Qualifier](qualifier.md)：多个数据库 Engine、HTTP Client 和同 Interface 实现的命名注入。
 - [托管注册表](managed-registries.md)：业务类与函数装饰器的声明式 AST 静态发现。
 - [数据库事务](transactions.md)：请求级 AsyncSession、UnitOfWork、多 Repository 和后台任务。
