@@ -1,8 +1,10 @@
 """声明式配置分组、装饰器校验与 YAML 加载。"""
 
+import os
 import re
 from collections.abc import Callable, Mapping
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from types import UnionType
 from typing import Any, ClassVar, cast, get_args, get_origin, overload
@@ -14,6 +16,42 @@ from msgspec import Meta
 CONFIG_VERSION = 1
 Converter = Callable[[Any, Path | None], Any]
 Validator = Callable[[Any], bool]
+_ENV_REFERENCE = re.compile(r"\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+@dataclass(frozen=True)
+class SecretRef:
+    """只保存环境变量名，字符串形式始终可安全写入模板和日志。"""
+
+    name: str
+    required: bool = True
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", self.name):
+            raise ValueError(f"环境变量名无效：{self.name}")
+
+    def __str__(self) -> str:
+        return f"${{{self.name}}}"
+
+
+def env(name: str, *, required: bool = True) -> SecretRef:
+    """声明一个环境变量引用；required=False 时未设置返回 None。"""
+    return SecretRef(name, required)
+
+
+def _resolve_secret(value: Any) -> Any:
+    """解析 SecretRef 或 ${ENV_NAME}，错误信息只包含变量名。"""
+    if isinstance(value, SecretRef):
+        reference = value
+    elif isinstance(value, str) and (match := _ENV_REFERENCE.fullmatch(value)) is not None:
+        reference = SecretRef(match.group("name"))
+    else:
+        return value
+    if reference.name in os.environ:
+        return os.environ[reference.name]
+    if reference.required:
+        raise ValueError(f"环境变量 {reference.name} 未设置")
+    return None
 
 
 def _matches_type(value: object, expected: object) -> bool:
@@ -67,11 +105,23 @@ class ConfigSetting:
         self, default: Any, value_type: object, converter: Converter | None, meta: Meta | None = None
     ) -> None:
         self.default = default
-        self.value_type = type(default) if value_type is None else value_type
+        self.value_type: object
+        if value_type is None:
+            self.value_type = (
+                (str if default.required else str | None) if isinstance(default, SecretRef) else type(default)
+            )
+        else:
+            self.value_type = value_type
         self.converter = converter
         self.meta = meta
         self.value = default
-        _validate_meta(default, meta)
+        if not isinstance(default, SecretRef):
+            _validate_meta(default, meta)
+
+    def resolve_default(self) -> None:
+        """在配置对象实例化时解析默认环境引用，而不是模块导入时。"""
+        self.value = _resolve_secret(self.default)
+        _validate_meta(self.value, self.meta)
 
     def __deepcopy__(self, memo: dict[int, Any]) -> ConfigSetting:
         """复制配置值，共享不可变的 Meta 约束和转换函数。"""
@@ -81,8 +131,9 @@ class ConfigSetting:
         return cloned
 
     def convert(self, value: Any, base_dir: Path | None) -> Any:
-        """转换 YAML 值并执行类型与 Meta 约束。"""
+        """转换 YAML 值和环境引用，再执行类型与 Meta 约束。"""
         converted = self.converter(value, base_dir) if self.converter is not None else value
+        converted = _resolve_secret(converted)
         if not _matches_type(converted, self.value_type):
             raise TypeError(f"配置值类型不匹配：期望 {self.value_type}，实际 {type(converted)}")
         _validate_meta(converted, self.meta)
@@ -101,6 +152,14 @@ class ConfigSection:
                 self._settings[name] = (
                     value if isinstance(value, ConfigSetting) else ConfigSetting(value, type(value), None)
                 )
+
+    def _resolve_secrets(self) -> None:
+        """递归解析当前配置对象中的环境变量引用。"""
+        for setting_value in self._settings.values():
+            setting_value.resolve_default()
+        for value in self.__dict__.values():
+            if isinstance(value, ConfigSection):
+                value._resolve_secrets()
 
     def _read(self, name: str) -> Any:
         """从值设置或嵌套分组中读取一个字段。"""
@@ -138,7 +197,7 @@ def setting(
     meta: Meta | None = None,
 ) -> ConfigSetting:
     """声明需要显式类型、转换器或 Meta 约束的配置值。"""
-    return ConfigSetting(default, value_type if value_type is not None else type(default), converter, meta)
+    return ConfigSetting(default, value_type, converter, meta)
 
 
 def section(**values: Any) -> ConfigSection:
@@ -171,6 +230,9 @@ class Config:
                 if name.startswith("_") or callable(value):
                     continue
                 self.__dict__[name] = deepcopy(value)
+        for value in self.__dict__.values():
+            if isinstance(value, ConfigSection):
+                value._resolve_secrets()
         self._validate()
 
     def _apply(self, changes: Mapping[str, Any], base_dir: Path | None = None) -> None:
@@ -325,6 +387,8 @@ __all__ = [
     "Config",
     "ConfigLoader",
     "ConfigSection",
+    "SecretRef",
+    "env",
     "section",
     "setting",
     "validate",

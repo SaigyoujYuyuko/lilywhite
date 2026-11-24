@@ -1,6 +1,8 @@
 """Bean 生命周期、第三方关闭适配和失败回滚测试。"""
 
 import asyncio
+from importlib import import_module
+from pathlib import Path
 
 import pytest
 
@@ -259,3 +261,67 @@ def test_async_scoped_bean_uses_async_scope_resolution_and_closes() -> None:
         assert first.closed
 
     asyncio.run(exercise())
+
+
+def test_standalone_component_is_precreated_and_managed_at_real_startup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """没有其他消费者的 Component 也应初始化、进入健康状态并关闭。"""
+    package = "standalone_component_app"
+    root = tmp_path / package
+    root.mkdir()
+    (root / "__init__.py").write_text('"""独立组件示例。"""\n', encoding="utf-8")
+    (root / "resources.py").write_text(
+        "from lilywhite import component\n"
+        "@component\n"
+        "class StandaloneResource:\n"
+        "    events = []\n"
+        "    async def initialize(self) -> None:\n"
+        '        type(self).events.append("initialize")\n'
+        "    async def close(self) -> None:\n"
+        '        type(self).events.append("close")\n',
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    runtime = ApplicationRuntime(AppProperties(), business_package=package)
+
+    async def exercise() -> None:
+        await runtime.lifespan.start()
+        assert runtime.health_center.snapshot().components["standalone_resource"].healthy
+        await runtime.lifespan.stop()
+
+    asyncio.run(exercise())
+    resources = import_module(f"{package}.resources")
+    assert resources.StandaloneResource.events == ["initialize", "close"]
+
+
+def test_singleton_component_used_only_by_scoped_consumer_is_precreated() -> None:
+    """仅被 Scoped 对象使用时，Singleton Component 也不能延迟到首次请求。"""
+
+    class SingletonResource:
+        initialized = False
+
+        async def initialize(self) -> None:
+            type(self).initialized = True
+
+        async def close(self) -> None:
+            pass
+
+    @service(lifetime=LifetimeType.SCOPED)
+    class ScopedConsumer:
+        def __init__(self, resource: SingletonResource) -> None:
+            self.resource = resource
+
+    container = DependencyContainer()
+    container.register_component(SingletonResource, SingletonResource, LifetimeType.SINGLETON)
+    container.register_service(ScopedConsumer, LifetimeType.SCOPED)
+    container.build()
+
+    managed = list(container.managed_components())
+    assert len(managed) == 1
+    assert not SingletonResource.initialized
+
+    asyncio.run(managed[0].initialize())
+    assert SingletonResource.initialized
+    assert container.resolve(SingletonResource) is managed[0]

@@ -7,13 +7,15 @@ from pathlib import Path
 
 import yaml
 
-from ..config import AppProperties, ConfigSection
+from ..config import AppProperties, ConfigSection, SecretRef
 
 
 def _yaml_value(value: object) -> object:
     """把配置默认值转换为 YAML 可表示的标量、列表或映射。"""
     if value is None or isinstance(value, str | int | float | bool):
         return value
+    if isinstance(value, SecretRef):
+        return str(value)
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, tuple | list):
@@ -24,10 +26,10 @@ def _yaml_value(value: object) -> object:
 
 
 def _section_values(section: ConfigSection) -> dict[str, object]:
-    """递归读取 ConfigSection，包括业务声明的嵌套配置段。"""
+    """递归读取配置声明，保留环境变量引用而不解析本机密钥。"""
     values: dict[str, object] = {}
     for name, setting in section._settings.items():
-        values[name] = _yaml_value(setting.value)
+        values[name] = _yaml_value(setting.default)
     for name, value in section.__dict__.items():
         if isinstance(value, ConfigSection):
             values[name] = _section_values(value)
@@ -35,13 +37,14 @@ def _section_values(section: ConfigSection) -> dict[str, object]:
 
 
 def default_config(properties_type: type[AppProperties] = AppProperties) -> dict[str, object]:
-    """从指定配置类型生成 YAML 映射，不包含示例业务分组。"""
-    properties = properties_type()
-    return {
-        name: _section_values(value) if isinstance(value, ConfigSection) else _yaml_value(value)
-        for name, value in properties.__dict__.items()
-        if not name.startswith("_")
-    }
+    """直接读取类型声明，避免生成模板时实例化配置或读取密钥。"""
+    values: dict[str, object] = {}
+    for base in reversed(properties_type.__mro__):
+        for name, value in vars(base).items():
+            if name.startswith("_") or callable(value):
+                continue
+            values[name] = _section_values(value) if isinstance(value, ConfigSection) else _yaml_value(value)
+    return values
 
 
 def _entry_properties_type(reference: str) -> type[AppProperties]:

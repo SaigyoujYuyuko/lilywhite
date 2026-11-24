@@ -16,6 +16,34 @@ version: 1
 
 其他字段都有默认值。执行 `lilywhite init` 可以生成一份不含业务分组的默认配置；加上 `--entry my_app.application:MyApplication` 后，也会生成入口 `properties_type` 中声明的业务配置段。仓库的 `config.example.yaml` 是完整公共示例，复制为 `config.yaml` 后再修改；本地配置不会进入 Git。
 
+## 环境变量与密钥
+
+使用 `env()` 声明密钥引用，应用实例化配置时才读取环境变量，导入模块和生成模板都不会读取：
+
+```python
+from lilywhite import AppProperties, env, section, setting
+
+
+class ProjectProperties(AppProperties):
+    database = section(
+        url=setting(env("PROJECT_DATABASE_URL"), value_type=str),
+    )
+    security = section(
+        api_token=setting(env("PROJECT_API_TOKEN", required=False), value_type=str | None),
+    )
+```
+
+`required=True` 是默认值，缺失时启动会报出环境变量名；`required=False` 未设置时得到 `None`。YAML 中也可以使用 `${ENV_NAME}`：
+
+```yaml
+database:
+  url: ${PROJECT_DATABASE_URL}
+security:
+  api_token: ${PROJECT_API_TOKEN}
+```
+
+`SecretRef` 的字符串形式始终只是 `${ENV_NAME}`，类型校验错误不会主动展开密钥。`lilywhite init --entry ...` 直接读取配置声明，生成的模板保留环境变量引用，不会写入本机密钥。
+
 ## 完整配置
 
 ```yaml

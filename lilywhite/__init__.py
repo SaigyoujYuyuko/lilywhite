@@ -1,7 +1,7 @@
 """LilyWhite：基于 Litestar 的 Pythonic 服务端框架。"""
 
 from .app import LilyWhiteApplication, LilywhiteMain, run
-from .config import AppProperties
+from .config import AppProperties, SecretRef, env
 from .decorators.component import component
 from .decorators.configuration import bean, configuration
 from .decorators.conditional import enabled
@@ -28,6 +28,7 @@ __all__ = [
     "LilywhiteMain",
     "ManagedRegistry",
     "Qualifier",
+    "SecretRef",
     "UnitOfWork",
     "WebSocketClient",
     "bean",
@@ -35,6 +36,7 @@ __all__ = [
     "configuration",
     "controller",
     "enabled",
+    "env",
     "exception_handler",
     "middleware",
     "override_logger",

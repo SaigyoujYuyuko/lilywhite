@@ -295,6 +295,7 @@ class CacheComponent:
 - 启动时按注册顺序调用 `initialize()`。
 - 关闭时逆序调用 `close()`。
 - 组件健康状态会出现在 `/healthz`。
+- 所有 Singleton Component 都参与依赖图校验和预创建；即使没有任何消费者，或只被 Scoped 对象使用，也不会延迟到首次请求。
 
 Component 默认为自己注册，也可以指定公开 Interface 和生命周期：
 

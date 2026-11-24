@@ -201,6 +201,7 @@ class DependencyContainer:
         self._lifetimes: dict[_DependencyKey, LifetimeType] = {}
         self._implementations: dict[_DependencyKey, type[object]] = {}
         self._services: set[_DependencyKey] = set()
+        self._components: set[_DependencyKey] = set()
         self._beans: dict[_DependencyKey, _BeanRegistration] = {}
         self._resolving: list[_DependencyKey] = []
         self._checked_unqualified: set[object] = set()
@@ -261,6 +262,7 @@ class DependencyContainer:
             _type_name(implementation),
             lifetime.value,
         )
+        self._components.add(key)
         self._lifetimes[key] = lifetime
         self._implementations[key] = implementation
 
@@ -321,19 +323,31 @@ class DependencyContainer:
 
     def build(self) -> None:
         """验证完整依赖图，并提前创建不依赖异步工厂的 Singleton。"""
-        log.debug("dependency graph build start services={}", len(self._services))
+        log.debug(
+            "dependency graph build start services={} components={}",
+            len(self._services),
+            len(self._components),
+        )
         for key in sorted(self._services, key=_key_name):
             self._validate(key, ())
         for key in sorted(self._beans, key=_key_name):
+            self._validate(key, ())
+        for key in sorted(self._components, key=_key_name):
             self._validate(key, ())
         for key in sorted(self._services, key=_key_name):
             if self._lifetimes[key] is LifetimeType.SINGLETON and not self._requires_async(key):
                 self._resolve_singleton(key)
         for key in sorted(self._beans, key=_key_name):
+            if self._lifetimes[key] is LifetimeType.SINGLETON and not self._requires_async(key):
+                self._resolve_singleton(key)
+        for key in sorted(self._components, key=_key_name):
             if self._lifetimes[key] is LifetimeType.SINGLETON and not self._requires_async(key):
                 self._resolve_singleton(key)
         log.debug(
-            "dependency graph build complete services={} beans={}", len(self._services), len(self._beans)
+            "dependency graph build complete services={} beans={} components={}",
+            len(self._services),
+            len(self._beans),
+            len(self._components),
         )
 
     async def build_async(self) -> None:
@@ -343,6 +357,9 @@ class DependencyContainer:
             if self._lifetimes[key] is LifetimeType.SINGLETON and key not in self._instances:
                 await self._resolve_singleton_async(key)
         for key in sorted(self._beans, key=_key_name):
+            if self._lifetimes[key] is LifetimeType.SINGLETON and key not in self._instances:
+                await self._resolve_singleton_async(key)
+        for key in sorted(self._components, key=_key_name):
             if self._lifetimes[key] is LifetimeType.SINGLETON and key not in self._instances:
                 await self._resolve_singleton_async(key)
 
