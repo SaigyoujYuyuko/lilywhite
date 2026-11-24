@@ -116,6 +116,29 @@ class AuthMiddleware:
 
 `__call__` 必须是 async，并接收 `scope / receive / send`。应用级中间件不能注入 Scoped 或 Transient 依赖；这些对象应改由 Controller 的 Scoped Service 使用。签名或生命周期不合法会在启动阶段报错。
 
+### 中间件提前返回响应
+
+`send_response()` 可以直接发送现有 Response 构造函数的结果，不需要手写 JSON、Header 和 ASGI 事件：
+
+```python
+from lilywhite.http.middleware_result import send_response
+from lilywhite.http.result import unauthorized
+
+
+async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    if not self.tokens.verify(scope):
+        await send_response(
+            scope,
+            send,
+            unauthorized(message="需要有效的 API Token"),
+        )
+        return
+
+    await self.app(scope, receive, send)
+```
+
+状态码、Unicode JSON、`WWW-Authenticate`、`Content-Type` 和 `Content-Length` 都由 Litestar 处理。普通 Response 都可以使用；流式响应和 SSE 应继续按各自的异步迭代协议处理。
+
 ## Service
 
 Service 的依赖直接写进构造器：
