@@ -1,5 +1,6 @@
 """构造器元数据缓存的调用次数、限定名和容器隔离测试。"""
 
+import asyncio
 from typing import Annotated
 
 import pytest
@@ -49,8 +50,8 @@ def test_constructor_metadata_is_read_once_per_container(
     assert signature_calls == 1
     assert hints_calls == 1
 
-    first = container.create_scope().resolve(CacheRoot)
-    second = container.create_scope().resolve(CacheRoot)
+    first = asyncio.run(container.create_scope().resolve(CacheRoot))
+    second = asyncio.run(container.create_scope().resolve(CacheRoot))
     assert first is not second
     assert first.leaf is not second.leaf
     assert signature_calls == 1
@@ -89,6 +90,6 @@ def test_prepare_reuses_bindings_without_repository_lookup(
         container_module.repository_registrations, "registered_repositories", unexpected_lookup
     )
 
-    first = container.create_scope().resolve(CacheRoot)
-    second = container.create_scope().resolve(CacheRoot)
+    first = asyncio.run(container.create_scope().resolve(CacheRoot))
+    second = asyncio.run(container.create_scope().resolve(CacheRoot))
     assert first.leaf is not second.leaf

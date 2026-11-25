@@ -114,34 +114,11 @@ class DependencyScope:
         self._resources: list[tuple[_DependencyKey, object]] = []
         self._resolving: list[_DependencyKey] = []
 
-    def resolve[T](self, target: type[T], qualifier: str | None = None) -> T:
-        """同步解析当前作用域；遇到异步工厂时提示改用 resolve_async。"""
-        return cast(T, self._resolve(_dependency_key(target, qualifier)))
-
-    async def resolve_async[T](self, target: type[T], qualifier: str | None = None) -> T:
+    async def resolve[T](self, target: type[T], qualifier: str | None = None) -> T:
         """异步解析当前作用域内的同步或异步 Bean。"""
-        return cast(T, await self._resolve_async(_dependency_key(target, qualifier)))
+        return cast(T, await self._resolve(_dependency_key(target, qualifier)))
 
-    def _resolve(self, key: _DependencyKey) -> object:
-        """按完整依赖身份处理缓存、循环检查和递归构造。"""
-        lifetime = self._container._prepare(key)
-        if lifetime is LifetimeType.SINGLETON:
-            return self._container._resolve_singleton(key)
-        if lifetime is LifetimeType.SCOPED and key in self._instances:
-            log.trace("scoped cache hit target={}", _key_name(key))
-            return self._instances[key]
-        if key in self._resolving:
-            cycle = " -> ".join(_key_name(item) for item in (*self._resolving, key))
-            raise DependencyInjectionException(f"检测到循环依赖：{cycle}")
-
-        self._resolving.append(key)
-        try:
-            instance = self._container._construct(key, self)
-        finally:
-            self._resolving.pop()
-        return self._cache_scoped(key, lifetime, instance)
-
-    async def _resolve_async(self, key: _DependencyKey) -> object:
+    async def _resolve(self, key: _DependencyKey) -> object:
         """在请求或后台任务中递归构造包含异步工厂的依赖链。"""
         lifetime = self._container._prepare(key)
         if lifetime is LifetimeType.SINGLETON:
@@ -402,10 +379,7 @@ class DependencyContainer:
             dependencies[name] = Provide(singleton_factory)
         else:
             http_factory = self._http_factory(key)
-            if self._requires_async(key):
-                dependencies[name] = Provide(http_factory, use_cache=False)
-            else:
-                dependencies[name] = Provide(http_factory, use_cache=False, sync_to_thread=False)
+            dependencies[name] = Provide(http_factory, use_cache=False)
 
     def _prepare(self, key: _DependencyKey) -> LifetimeType:
         """复用已校验绑定；仅首次解析时检查候选和 Repository 注册表。"""
@@ -539,24 +513,13 @@ class DependencyContainer:
         self,
         key: _DependencyKey,
     ) -> Callable[[Request[object, object, State]], object]:
-        """按依赖链选择同步或异步的 Litestar 请求作用域工厂。"""
-        if self._requires_async(key):
+        """创建统一的异步 Litestar 请求作用域工厂。"""
 
-            async def resolve_async(request: Request[object, object, State]) -> object:
-                """异步解析当前请求中的目标 Service 或命名 Bean。"""
-                return await self._request_scope(request)._resolve_async(key)
-
-            return resolve_async
-
-        def resolve(request: Request[object, object, State]) -> object:
-            """从当前请求作用域解析目标 Service。"""
-            return self._resolve_http(key, request)
+        async def resolve(request: Request[object, object, State]) -> object:
+            """从当前请求作用域解析目标 Service 或命名 Bean。"""
+            return await self._request_scope(request)._resolve(key)
 
         return resolve
-
-    def _resolve_http(self, key: _DependencyKey, request: Request[object, object, State]) -> object:
-        """从当前请求的作用域解析 Service。"""
-        return self._request_scope(request)._resolve(key)
 
     def _request_scope(self, request: Request[object, object, State]) -> DependencyScope:
         """取得或创建当前请求共享的依赖作用域。"""
@@ -580,11 +543,9 @@ class DependencyContainer:
         await close_resource(instance, self._resource_closer(key))
 
     def _construct(self, key: _DependencyKey, scope: DependencyScope | None) -> object:
-        """同步构造依赖；异步依赖链必须走 lifespan 或 resolve_async。"""
+        """同步构造 Singleton；异步依赖链必须先完成应用启动。"""
         if self._requires_async(key):
-            raise DependencyInjectionException(
-                f"依赖需要异步构造，请等待应用启动或使用 resolve_async：{_key_name(key)}"
-            )
+            raise DependencyInjectionException(f"依赖需要异步构造，请等待应用启动完成：{_key_name(key)}")
         implementation = self._implementations[key]
         arguments: dict[str, object] = {}
         for parameter in self._dependencies(key):
@@ -629,7 +590,7 @@ class DependencyContainer:
                     )
                 arguments[parameter.name] = await self._resolve_singleton_async(parameter.key)
             else:
-                arguments[parameter.name] = await scope._resolve_async(parameter.key)
+                arguments[parameter.name] = await scope._resolve(parameter.key)
 
         bean = self._beans.get(key)
         if bean is not None:

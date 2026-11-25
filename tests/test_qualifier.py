@@ -1,5 +1,6 @@
 """同类型多实例的限定注入、Litestar 桥接和生命周期测试。"""
 
+import asyncio
 from importlib import import_module
 from pathlib import Path
 from typing import Annotated
@@ -121,21 +122,24 @@ def test_scoped_cache_separates_qualifiers_and_request_scopes() -> None:
     class RedisCache(Cache):
         pass
 
-    container = DependencyContainer()
-    container.register_component(Cache, MemoryCache, LifetimeType.SCOPED, name="memory")
-    container.register_component(Cache, RedisCache, LifetimeType.SCOPED, name="redis")
-    first_scope = container.create_scope()
-    second_scope = container.create_scope()
+    async def exercise() -> None:
+        container = DependencyContainer()
+        container.register_component(Cache, MemoryCache, LifetimeType.SCOPED, name="memory")
+        container.register_component(Cache, RedisCache, LifetimeType.SCOPED, name="redis")
+        first_scope = container.create_scope()
+        second_scope = container.create_scope()
 
-    memory = first_scope.resolve(Cache, "memory")
-    redis = first_scope.resolve(Cache, "redis")
+        memory = await first_scope.resolve(Cache, "memory")
+        redis = await first_scope.resolve(Cache, "redis")
 
-    assert first_scope.resolve(Cache, "memory") is memory
-    assert first_scope.resolve(Cache, "redis") is redis
-    assert memory is not redis
-    assert second_scope.resolve(Cache, "memory") is not memory
-    with pytest.raises(DependencyInjectionException, match="多个实现"):
-        first_scope.resolve(Cache)
+        assert await first_scope.resolve(Cache, "memory") is memory
+        assert await first_scope.resolve(Cache, "redis") is redis
+        assert memory is not redis
+        assert await second_scope.resolve(Cache, "memory") is not memory
+        with pytest.raises(DependencyInjectionException, match="多个实现"):
+            await first_scope.resolve(Cache)
+
+    asyncio.run(exercise())
 
 
 def test_dependency_rejects_multiple_qualifiers() -> None:

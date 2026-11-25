@@ -97,7 +97,7 @@ class CheckoutService:
 async def run_checkout(container: DependencyContainer) -> None:
     scope = container.create_scope()
     try:
-        checkout = scope.resolve(CheckoutService)
+        checkout = await scope.resolve(CheckoutService)
         await checkout.checkout(user, invoice)
     finally:
         await scope.close()

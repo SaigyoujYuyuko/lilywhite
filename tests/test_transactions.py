@@ -109,8 +109,8 @@ def test_repositories_commit_and_release_shared_session() -> None:
     async def exercise() -> None:
         container = build_container()
         scope = container.create_scope()
-        service_instance = scope.resolve(CheckoutService)
-        session = scope.resolve(FakeSession)
+        service_instance = await scope.resolve(CheckoutService)
+        session = await scope.resolve(FakeSession)
         await service_instance.checkout()
 
         assert service_instance.identity.session is session
@@ -128,8 +128,8 @@ def test_exception_rolls_back_and_still_releases_session() -> None:
 
     async def exercise() -> None:
         scope = build_container().create_scope()
-        service_instance = scope.resolve(CheckoutService)
-        session = scope.resolve(FakeSession)
+        service_instance = await scope.resolve(CheckoutService)
+        session = await scope.resolve(FakeSession)
         try:
             await service_instance.checkout(fail=True)
         except ValueError:
@@ -148,8 +148,8 @@ def test_background_jobs_receive_independent_transaction_scopes() -> None:
     async def job(container: DependencyContainer, *, fail: bool) -> FakeSession:
         scope = container.create_scope()
         try:
-            service_instance = scope.resolve(CheckoutService)
-            session = scope.resolve(FakeSession)
+            service_instance = await scope.resolve(CheckoutService)
+            session = await scope.resolve(FakeSession)
             with contextlib.suppress(ValueError):
                 await service_instance.checkout(fail=fail)
             return session

@@ -136,10 +136,10 @@ def test_scoped_and_transient_beans_are_released_by_scope() -> None:
         assert Client.instances == 0
 
         scope = container.create_scope()
-        scoped = scope.resolve(Client, "scoped_client")
-        first_transient = scope.resolve(Client, "transient_client")
-        second_transient = scope.resolve(Client, "transient_client")
-        assert scope.resolve(Client, "scoped_client") is scoped
+        scoped = await scope.resolve(Client, "scoped_client")
+        first_transient = await scope.resolve(Client, "transient_client")
+        second_transient = await scope.resolve(Client, "transient_client")
+        assert await scope.resolve(Client, "scoped_client") is scoped
         assert first_transient is not second_transient
 
         await scope.close()
@@ -253,8 +253,8 @@ def test_async_scoped_bean_uses_async_scope_resolution_and_closes() -> None:
         container.build()
         scope = container.create_scope()
 
-        first = await scope.resolve_async(AsyncSession)
-        second = await scope.resolve_async(AsyncSession)
+        first = await scope.resolve(AsyncSession)
+        second = await scope.resolve(AsyncSession)
         assert first is second
         assert not first.closed
         await scope.close()

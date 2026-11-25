@@ -44,7 +44,7 @@ identity = container.resolve(AsyncClient, "identity")
 billing = container.resolve(AsyncClient, "billing")
 ```
 
-请求或后台任务的 `DependencyScope` 使用同样的第二个参数：`scope.resolve(AsyncClient, "billing")`。
+请求或后台任务的 `DependencyScope` 使用同样的第二个参数：`await scope.resolve(AsyncClient, "billing")`。
 
 ## 多个数据库 Engine
 

@@ -25,8 +25,8 @@ def test_background_scope_reuses_and_closes_scoped_resource() -> None:
         container.build()
         scope = container.create_scope()
 
-        resource = scope.resolve(ScopedResource)
-        assert scope.resolve(ScopedResource) is resource
+        resource = await scope.resolve(ScopedResource)
+        assert await scope.resolve(ScopedResource) is resource
 
         await scope.close()
         await scope.close()

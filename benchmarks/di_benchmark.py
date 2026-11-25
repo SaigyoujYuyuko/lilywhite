@@ -1,6 +1,7 @@
 """测量构造器元数据读取和依赖解析，供缓存前后直接对比。"""
 
 import argparse
+import asyncio
 import json
 import platform
 import statistics
@@ -54,7 +55,7 @@ def measure_metadata(calls: int) -> dict[str, float | int]:
     }
 
 
-def measure_resolution(calls: int) -> dict[str, float | int]:
+async def measure_resolution(calls: int) -> dict[str, float | int]:
     """每次解析都创建三层 Transient，避免命中 Singleton 或 Scoped 缓存。"""
     container = DependencyContainer()
     container.register_service(Leaf, LifetimeType.TRANSIENT)
@@ -64,12 +65,12 @@ def measure_resolution(calls: int) -> dict[str, float | int]:
     scope = container.create_scope()
 
     for _ in range(100):
-        scope.resolve(Root)
+        await scope.resolve(Root)
     samples: list[float] = []
     started = perf_counter()
     for _ in range(calls):
         call_started = perf_counter()
-        scope.resolve(Root)
+        await scope.resolve(Root)
         samples.append(perf_counter() - call_started)
     elapsed = perf_counter() - started
     samples.sort()
@@ -84,7 +85,7 @@ def measure_resolution(calls: int) -> dict[str, float | int]:
     }
 
 
-def run_benchmark(calls: int) -> dict[str, object]:
+async def run_benchmark(calls: int) -> dict[str, object]:
     """执行一次完整 DI 基准并返回可保存的数据。"""
     settings = AppProperties().override(logging={"console": False}).logging
     setup_logging(settings, intercept_standard_logging=False)
@@ -93,7 +94,7 @@ def run_benchmark(calls: int) -> dict[str, object]:
         "python": platform.python_version(),
         "platform": platform.platform(),
         "metadata": measure_metadata(calls),
-        "resolution": measure_resolution(calls),
+        "resolution": await measure_resolution(calls),
     }
 
 
@@ -103,7 +104,7 @@ def main() -> None:
     parser.add_argument("--calls", type=int, default=3000)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    result = run_benchmark(args.calls)
+    result = asyncio.run(run_benchmark(args.calls))
     rendered = json.dumps(result, ensure_ascii=False, indent=2)
     print(rendered)
     if args.output is not None:

@@ -42,7 +42,7 @@ def test_client_disconnect_closes_scope() -> None:
             nonlocal resource
             dependency_scope = container.create_scope()
             scope[container.request_scope_key] = dependency_scope
-            resource = dependency_scope.resolve(DisconnectResource)
+            resource = await dependency_scope.resolve(DisconnectResource)
             raise ClientDisconnect
 
         middleware = RequestScopeMiddleware(app, container)
@@ -67,7 +67,7 @@ def test_request_cancellation_closes_scope() -> None:
             nonlocal resource
             dependency_scope = container.create_scope()
             scope[container.request_scope_key] = dependency_scope
-            resource = dependency_scope.resolve(DisconnectResource)
+            resource = await dependency_scope.resolve(DisconnectResource)
             started.set()
             await asyncio.sleep(60)
 
@@ -96,7 +96,7 @@ def test_background_task_failure_still_closes_its_scope() -> None:
             nonlocal resource
             scope = container.create_scope()
             try:
-                resource = scope.resolve(DisconnectResource)
+                resource = await scope.resolve(DisconnectResource)
                 raise RuntimeError("background failed")
             finally:
                 await scope.close()
