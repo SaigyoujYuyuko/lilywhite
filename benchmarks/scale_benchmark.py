@@ -18,9 +18,9 @@ from litestar.di import NamedDependency
 from litestar.middleware import DefineMiddleware
 from litestar.testing import AsyncTestClient
 
-from lilywhite.app.container import DependencyContainer
-from lilywhite.app.discovery import import_decorated_modules, scan_decorated_modules
-from lilywhite.app.scope import RequestScopeMiddleware
+from lilywhite.app.DI.container import DependencyContainer
+from lilywhite.app.DI.discovery import import_decorated_modules, scan_decorated_modules
+from lilywhite.app.DI.scope import RequestScopeMiddleware
 from lilywhite.config import AppProperties
 from lilywhite.decorators.service import registered_services
 from lilywhite.logger import setup_logging

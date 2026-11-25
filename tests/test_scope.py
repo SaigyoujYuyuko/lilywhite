@@ -2,7 +2,7 @@
 
 import asyncio
 
-from lilywhite.app.container import DependencyContainer
+from lilywhite.app.DI.container import DependencyContainer
 from lilywhite.utils.registry import LifetimeType
 
 

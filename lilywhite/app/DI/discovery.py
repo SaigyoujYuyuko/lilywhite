@@ -9,12 +9,12 @@ from types import ModuleType
 from litestar import Controller
 from litestar.handlers.websocket_handlers import WebsocketListener
 
-from ..config import AppProperties
-from ..decorators.conditional import ConditionRegistration
-from ..decorators.controller import registered_controllers
-from ..decorators.websocket import registered_websocket_controllers
-from ..logger import LoggerManager
-from ..utils.registry import ManagedRegistrySelection
+from ...config import AppProperties
+from ...decorators.conditional import ConditionRegistration
+from ...decorators.controller import registered_controllers
+from ...decorators.websocket import registered_websocket_controllers
+from ...logger import LoggerManager
+from ...utils.registry import ManagedRegistrySelection
 from .ast_scan import DecoratedClass, StaticScanError, scan_decorated_classes
 from .managed_scan import scan_managed_registries
 

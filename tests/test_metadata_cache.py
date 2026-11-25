@@ -4,9 +4,9 @@ from typing import Annotated
 
 import pytest
 
-import lilywhite.app.container as container_module
+import lilywhite.app.DI.container as container_module
 from lilywhite import Qualifier
-from lilywhite.app.container import DependencyContainer
+from lilywhite.app.DI.container import DependencyContainer
 from lilywhite.utils.registry import LifetimeType
 
 

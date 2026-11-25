@@ -8,7 +8,7 @@ import pytest
 from litestar.testing import TestClient
 
 from lilywhite import AppProperties, LilyWhiteApplication, Qualifier, bean, configuration, repository, service
-from lilywhite.app.container import DependencyContainer, DependencyInjectionException
+from lilywhite.app.DI.container import DependencyContainer, DependencyInjectionException
 from lilywhite.decorators.configuration import registered_beans
 from lilywhite.utils.registry import LifetimeType
 

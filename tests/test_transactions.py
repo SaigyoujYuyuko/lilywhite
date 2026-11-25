@@ -6,7 +6,7 @@ import contextlib
 import pytest
 
 from lilywhite import UnitOfWork, bean, configuration, service, transactional
-from lilywhite.app.container import DependencyContainer
+from lilywhite.app.DI.container import DependencyContainer
 from lilywhite.decorators.configuration import registered_beans
 from lilywhite.utils.registry import LifetimeType
 

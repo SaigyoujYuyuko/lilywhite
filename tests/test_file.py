@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from lilywhite import AyaFileIO, FileIO
-from lilywhite.app.container import DependencyContainer
+from lilywhite.app.DI.container import DependencyContainer
 from lilywhite.app.runtime import ApplicationRuntime
 from lilywhite.config import AppProperties
 

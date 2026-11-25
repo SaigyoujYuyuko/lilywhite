@@ -9,7 +9,7 @@ from litestar.handlers.websocket_handlers import WebsocketListener
 
 import lilywhite.app.boot as boot_module
 from lilywhite import AppProperties, LilywhiteMain, run
-from lilywhite.app.container import DependencyInjectionException
+from lilywhite.app.DI.container import DependencyInjectionException
 from lilywhite.app.runtime import ApplicationRuntime
 from lilywhite.config import ConfigLoader, section
 from lilywhite.decorators.conditional import condition_enabled, enabled

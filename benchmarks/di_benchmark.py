@@ -10,7 +10,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import get_type_hints
 
-from lilywhite.app.container import DependencyContainer
+from lilywhite.app.DI.container import DependencyContainer
 from lilywhite.config import AppProperties
 from lilywhite.logger import setup_logging
 from lilywhite.utils.registry import LifetimeType

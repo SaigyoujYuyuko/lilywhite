@@ -2,7 +2,7 @@
 
 import ast
 
-from ..utils.registry import ManagedRegistry, ManagedRegistrySelection, Named
+from ...utils.registry import ManagedRegistry, ManagedRegistrySelection, Named
 from .ast_scan import ASTScanner, package_module_sources, parse_python_source
 
 

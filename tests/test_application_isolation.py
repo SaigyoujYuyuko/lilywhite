@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from lilywhite import AppProperties
-from lilywhite.app.container import DependencyInjectionException
+from lilywhite.app.DI.container import DependencyInjectionException
 from lilywhite.app.runtime import ApplicationRuntime
 
 

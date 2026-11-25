@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from lilywhite import bean, configuration
-from lilywhite.app.container import DependencyContainer, DependencyInjectionException
+from lilywhite.app.DI.container import DependencyContainer, DependencyInjectionException
 from lilywhite.app.runtime import ApplicationRuntime
 from lilywhite.config import AppProperties
 from lilywhite.decorators.configuration import registered_bean_methods

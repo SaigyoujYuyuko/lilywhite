@@ -8,7 +8,7 @@ from ..observability import LogStream
 from ..observability.health import HealthCenter
 from ..observability.metrics import RequestMetrics
 from ..utils.registry import ManagedRegistrySelection
-from .container import create_container
+from .DI.container import create_container
 from .lifespan import LifespanManager
 
 

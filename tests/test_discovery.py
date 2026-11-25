@@ -7,8 +7,8 @@ import pytest
 from litestar.testing import TestClient
 
 from lilywhite import LilyWhiteApplication
-from lilywhite.app.ast_scan import scan_decorated_classes
-from lilywhite.app.discovery import scan_decorated_modules
+from lilywhite.app.DI.ast_scan import scan_decorated_classes
+from lilywhite.app.DI.discovery import scan_decorated_modules
 from lilywhite.config import AppProperties
 
 

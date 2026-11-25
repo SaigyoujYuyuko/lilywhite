@@ -4,8 +4,8 @@ import asyncio
 
 import pytest
 
-from lilywhite.app.container import DependencyContainer
-from lilywhite.app.scope import RequestScopeMiddleware
+from lilywhite.app.DI.container import DependencyContainer
+from lilywhite.app.DI.scope import RequestScopeMiddleware
 from lilywhite.utils.registry import LifetimeType
 from lilywhite.utils.tasks import AsyncTaskManager
 

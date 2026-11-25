@@ -15,10 +15,10 @@ from litestar.types import ASGIApp, ExceptionHandler
 from ..decorators.exception_handler import registered_exception_handlers
 from ..decorators.middleware import registered_middlewares
 from ..http.middleware.metrics import RequestMetricsHooks, RequestMetricsMiddleware
-from .container import DependencyContainer
-from .discovery import discover_business_controllers, discover_controllers, discover_websocket_controllers
+from .DI.container import DependencyContainer
+from .DI.discovery import discover_business_controllers, discover_controllers, discover_websocket_controllers
+from .DI.scope import RequestScopeMiddleware
 from .runtime import ApplicationRuntime
-from .scope import RequestScopeMiddleware
 
 type ApplicationLifespan = Callable[[Litestar], AbstractAsyncContextManager[None]]
 

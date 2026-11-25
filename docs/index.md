@@ -21,7 +21,8 @@
 
 ```text
 lilywhite/          框架本体
-  app/              入口、ASGI、DI、静态发现和生命周期
+  app/              入口、ASGI 和生命周期
+  app/DI/           依赖容器、作用域和静态发现
   decorators/       业务分层、HTTP、配置与事务装饰器
   http/             HTTP 响应、内置运维入口和中间件
   observability/    健康、指标、日志订阅及其查询用例

@@ -8,7 +8,7 @@ from litestar.testing import TestClient
 from litestar.types import ASGIApp, Receive, Scope, Send
 
 from lilywhite import AppProperties, LilyWhiteApplication, middleware
-from lilywhite.app.container import DependencyInjectionException
+from lilywhite.app.DI.container import DependencyInjectionException
 
 
 def test_middleware_order_and_singleton_di_complete_real_http(

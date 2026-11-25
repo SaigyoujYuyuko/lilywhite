@@ -10,24 +10,24 @@ from litestar import Request
 from litestar.datastructures import State
 from litestar.di import Provide
 
-from ..config import AppProperties
-from ..decorators import component as component_registrations
-from ..decorators import exception_handler as exception_handler_registrations
-from ..decorators import repository as repository_registrations
-from ..decorators import service as service_registrations
-from ..decorators.conditional import condition_enabled
-from ..decorators.configuration import _impl as configuration_registrations
-from ..decorators.configuration._impl import BeanFactory
-from ..lifecycle import (
+from ...config import AppProperties
+from ...decorators import component as component_registrations
+from ...decorators import exception_handler as exception_handler_registrations
+from ...decorators import repository as repository_registrations
+from ...decorators import service as service_registrations
+from ...decorators.conditional import condition_enabled
+from ...decorators.configuration import _impl as configuration_registrations
+from ...decorators.configuration._impl import BeanFactory
+from ...lifecycle import (
     AdaptedResource,
     ManagedComponent,
     RequestScopedResource,
     ResourceCloser,
     close_resource,
 )
-from ..logger import LoggerManager
-from ..qualifier import Qualifier, qualifier_name
-from ..utils.registry import LifetimeType, ManagedRegistrySelection
+from ...logger import LoggerManager
+from ...qualifier import Qualifier, qualifier_name
+from ...utils.registry import LifetimeType, ManagedRegistrySelection
 from .discovery import import_decorated_modules, import_package_modules
 
 log = LoggerManager.get_logger("DI")
