@@ -23,6 +23,7 @@ StaticDiscoveryError = StaticScanError
 log = LoggerManager.get_logger("DI")
 
 _DECORATOR_SOURCES = {
+    "background_task": frozenset({"lilywhite", "lilywhite.decorators.background"}),
     "controller": frozenset({"lilywhite", "lilywhite.decorators.controller"}),
     "exception_handler": frozenset({"lilywhite", "lilywhite.decorators.exception_handler"}),
     "middleware": frozenset({"lilywhite", "lilywhite.decorators.middleware"}),

@@ -10,6 +10,7 @@
 - [多实例与 Qualifier](qualifier.md)：多个数据库 Engine、HTTP Client 和同 Interface 实现的命名注入。
 - [托管注册表](managed-registries.md)：业务类与函数装饰器的声明式 AST 静态发现。
 - [数据库事务](transactions.md)：请求级 AsyncSession、UnitOfWork、多 Repository 和后台任务。
+- [响应后台任务](background.md)：声明式任务、响应后执行、并发限制和优雅关闭。
 - [大型项目组织与资源管理](large-projects.md)：模块边界、生命周期、第三方适配、可选依赖和多应用。
 - [性能基准](performance.md)：DI 缓存对比、规模化启动、请求延迟和资源回收。
 - [配置](configuration.md)：YAML、命令行覆盖、声明式分组、字段约束和跨字段校验。
@@ -23,7 +24,7 @@
 lilywhite/          框架本体
   app/              入口、ASGI 和生命周期
   app/DI/           依赖容器、作用域和静态发现
-  decorators/       业务分层、HTTP、配置与事务装饰器
+  decorators/       业务分层、HTTP、配置、事务与后台任务装饰器
   http/             HTTP 响应、内置运维入口和中间件
   observability/    健康、指标、日志订阅及其查询用例
   websocket/        WebSocket 客户端

@@ -345,6 +345,9 @@ class AppProperties(Config):
         log_access_token=setting(None, value_type=str | None),
         metrics_window_size=setting(4096, meta=Meta(ge=1, le=1_000_000)),
     )
+    background = section(
+        max_concurrency=setting(0, meta=Meta(ge=0, le=1_000_000)),
+    )
 
 
 class ConfigLoader:

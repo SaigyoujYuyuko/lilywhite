@@ -55,6 +55,7 @@ uv run python -m my_app
 - [多数据库、多客户端与 Qualifier](docs/qualifier.md)
 - [业务装饰器与托管注册表](docs/managed-registries.md)
 - [事务、模块化与资源生命周期](docs/large-projects.md)
+- [声明式响应后台任务](docs/background.md)
 - [YAML 与声明式配置](docs/configuration.md)
 - [健康检查、指标、日志流与响应格式](docs/operations.md)
 - [文档导航与仓库结构](docs/index.md)

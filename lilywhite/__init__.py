@@ -2,6 +2,7 @@
 
 from .app import LilyWhiteApplication, LilywhiteMain, run
 from .config import AppProperties, SecretRef, env
+from .decorators.background import background_task
 from .decorators.component import component
 from .decorators.configuration import bean, configuration
 from .decorators.conditional import enabled
@@ -16,6 +17,7 @@ from .decorators.websocket import websocket_controller
 from .logger import override_logger
 from .qualifier import Qualifier
 from .transaction import UnitOfWork
+from .utils.background import BackgroundManager
 from .utils.file import AyaFileIO, FileIO
 from .utils.registry import ManagedRegistry
 from .websocket import WebSocketClient
@@ -23,6 +25,7 @@ from .websocket import WebSocketClient
 __all__ = [
     "AppProperties",
     "AyaFileIO",
+    "BackgroundManager",
     "FileIO",
     "LilyWhiteApplication",
     "LilywhiteMain",
@@ -31,6 +34,7 @@ __all__ = [
     "SecretRef",
     "UnitOfWork",
     "WebSocketClient",
+    "background_task",
     "bean",
     "component",
     "configuration",

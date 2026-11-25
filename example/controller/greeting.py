@@ -7,7 +7,7 @@ from litestar.di import NamedDependency
 from litestar.params import FromPath
 
 from lilywhite import controller
-from lilywhite.http.result import ok
+from lilywhite.http.result import response
 
 from ..services.greeting import GreetingService
 
@@ -24,7 +24,11 @@ class GreetingController(Controller):
     ) -> Response[object]:
         """返回指定名字的问候语。"""
         result = greeting_service.greet(name)
-        return ok(result)
+        return response(
+            result,
+            headers={"Cache-Control": "no-store"},
+            background=greeting_service.greeting_log(name),
+        )
 
 
 __all__ = ["GreetingController"]

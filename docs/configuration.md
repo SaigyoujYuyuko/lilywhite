@@ -69,6 +69,10 @@ logging:
   # zip、gz、bz2、xz；null 表示轮转后不压缩。
   file_compression: zip
 
+background:
+  # 响应结束后任务的全局并发上限；0 表示不限制。
+  max_concurrency: 0
+
 operations:
   metrics_window_size: 4096
 
