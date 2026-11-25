@@ -162,7 +162,7 @@ async def chunks() -> AsyncIterator[str]:
 return stream(chunks())
 ```
 
-默认媒体类型是 `text/plain`，可以通过 `status`、`headers` 和 `media_type` 调整。文件下载等二进制响应可设置 `media_type="application/octet-stream"`。
+默认媒体类型是 `text/plain`，可以通过 `status`、`headers` 和 `media_type` 调整。文件下载等二进制响应可设置 `media_type="application/octet-stream"`。`response()`、`stream()` 和 `sse()` 也直接支持 Litestar 的 `background`、`cookies`、`encoding` 参数；`response()` 额外支持 `type_encoders`。
 
 ## SSE 事件流
 
@@ -181,7 +181,7 @@ async def events() -> AsyncIterator[dict[str, object] | None]:
 return sse(events(), event_type="greeting")
 ```
 
-需要断线重连时，用 `event_id=lambda event: ...` 提供事件 ID；`retry_duration` 和 `headers` 也可以按业务调整。
+需要断线重连时，用 `event_id=lambda event: ...` 为每个事件计算 ID，也可以直接传字符串或整数作为固定 ID。`status`、`retry_duration`、`comment_message` 和 `headers` 都可以按业务调整，例如 `sse(events(), status=202, comment_message="connected")`。
 
 ## 日志级别
 

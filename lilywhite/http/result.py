@@ -4,10 +4,11 @@ from collections.abc import AsyncIterator, Callable
 
 import msgspec
 from litestar import Response
-from litestar.enums import MediaType
+from litestar.background_tasks import BackgroundTask, BackgroundTasks
+from litestar.enums import MediaType, OpenAPIMediaType
 from litestar.response import Stream
 from litestar.response.sse import ServerSentEvent, ServerSentEventMessage
-from litestar.types import StreamType
+from litestar.types import ResponseCookies, ResponseHeaders, StreamType, TypeEncodersMap
 
 type ResponseContent[T] = T | dict[str, object] | None
 type StreamContent = StreamType[str | bytes] | Callable[[], StreamType[str | bytes]]
@@ -25,32 +26,61 @@ def _response_content[T](content: T | None, params: dict[str, object]) -> Respon
 def response[T](
     content: T,
     *,
-    status: int = 200,
-    headers: dict[str, str] | None = None,
-    media_type: MediaType | str = MediaType.JSON,
+    status: int | None = 200,
+    headers: ResponseHeaders | None = None,
+    media_type: MediaType | OpenAPIMediaType | str | None = MediaType.JSON,
+    background: BackgroundTask | BackgroundTasks | None = None,
+    cookies: ResponseCookies | None = None,
+    encoding: str = "utf-8",
+    type_encoders: TypeEncodersMap | None = None,
 ) -> Response[T]:
-    """构造指定内容、状态码、Header 和媒体类型的响应。"""
-    return Response(content, status_code=status, headers=headers, media_type=media_type)
+    """构造响应，并透传 Litestar 的通用响应选项。"""
+    return Response(
+        content,
+        status_code=status,
+        headers=headers,
+        media_type=media_type,
+        background=background,
+        cookies=cookies,
+        encoding=encoding,
+        type_encoders=type_encoders,
+    )
 
 
 def stream(
     content: StreamContent,
     *,
-    status: int = 200,
-    headers: dict[str, str] | None = None,
-    media_type: MediaType | str = MediaType.TEXT,
+    status: int | None = 200,
+    headers: ResponseHeaders | None = None,
+    media_type: MediaType | OpenAPIMediaType | str | None = MediaType.TEXT,
+    background: BackgroundTask | BackgroundTasks | None = None,
+    cookies: ResponseCookies | None = None,
+    encoding: str = "utf-8",
 ) -> Stream:
     """把同步或异步内容块返回为普通流式 HTTP 响应。"""
-    return Stream(content, status_code=status, headers=headers, media_type=media_type)
+    return Stream(
+        content,
+        status_code=status,
+        headers=headers,
+        media_type=media_type,
+        background=background,
+        cookies=cookies,
+        encoding=encoding,
+    )
 
 
 def sse[T](
     events: AsyncIterator[T | None],
     *,
-    event_type: str = "message",
-    event_id: Callable[[T], str | int | None] | None = None,
-    retry_duration: int = 3000,
-    headers: dict[str, str] | None = None,
+    event_type: str | None = "message",
+    event_id: Callable[[T], str | int | None] | str | int | None = None,
+    retry_duration: int | None = 3000,
+    comment_message: str | None = None,
+    status: int | None = 200,
+    headers: ResponseHeaders | None = None,
+    background: BackgroundTask | BackgroundTasks | None = None,
+    cookies: ResponseCookies | None = None,
+    encoding: str = "utf-8",
 ) -> ServerSentEvent:
     """把任意事件流编码为 SSE，空事件作为注释心跳。"""
 
@@ -63,14 +93,20 @@ def sse[T](
                 yield ServerSentEventMessage(
                     data=msgspec.json.encode(event),
                     event=event_type,
-                    id=event_id(event) if event_id is not None else None,
+                    id=event_id(event) if callable(event_id) else event_id,
                 )
 
     return ServerSentEvent(
         messages(),
         event_type=event_type,
+        event_id=None if callable(event_id) else event_id,
         retry_duration=retry_duration,
+        comment_message=comment_message,
+        status_code=status,
         headers=headers if headers is not None else {"Cache-Control": "no-store"},
+        background=background,
+        cookies=cookies,
+        encoding=encoding,
     )
 
 

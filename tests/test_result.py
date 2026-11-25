@@ -5,11 +5,12 @@ from collections.abc import AsyncIterator
 import msgspec
 import pytest
 from litestar import Litestar, get
+from litestar.background_tasks import BackgroundTask
 from litestar.response import Stream
 from litestar.response.sse import ServerSentEvent
 from litestar.testing import TestClient
 
-from lilywhite.http.result import created, ok, sse, stream, unauthorized
+from lilywhite.http.result import created, ok, response, sse, stream, unauthorized
 
 
 class CustomResult(msgspec.Struct, frozen=True):
@@ -56,8 +57,32 @@ def test_created_and_unauthorized_keep_status_and_special_headers() -> None:
     assert unauthorized_result.headers["WWW-Authenticate"] == "Bearer"
 
 
+def test_response_forwards_litestar_options() -> None:
+    """通用响应应保留 Litestar 的序列化、Cookie 和生命周期选项。"""
+    background = BackgroundTask(lambda: None)
+    encoders = {CustomResult: lambda result: result.message}
+
+    result = response(
+        CustomResult(code=0, message="ok"),
+        background=background,
+        cookies={"spring": "coming"},
+        encoding="utf-16",
+        type_encoders=encoders,
+    )
+
+    assert result.background is background
+    assert result.cookies[0].key == "spring"
+    assert result.cookies[0].value == "coming"
+    assert result.encoding == "utf-16"
+    assert result.response_type_encoders == encoders
+
+
 def test_stream_sends_async_chunks_as_plain_http_body() -> None:
-    """普通流式响应应依次发送内容块，不添加 SSE 事件格式。"""
+    """普通流式响应应发送内容块，并透传 Cookie 和后台任务。"""
+    completed: list[str] = []
+
+    def complete() -> None:
+        completed.append("done")
 
     async def chunks() -> AsyncIterator[str]:
         yield "春天"
@@ -65,19 +90,31 @@ def test_stream_sends_async_chunks_as_plain_http_body() -> None:
 
     @get("/chunks")
     async def chunk_endpoint() -> Stream:
-        return stream(chunks(), status=206, headers={"X-Content-Mode": "chunks"})
+        return stream(
+            chunks(),
+            status=206,
+            headers={"X-Content-Mode": "chunks"},
+            cookies={"spring": "coming"},
+            background=BackgroundTask(complete),
+        )
 
     with TestClient(Litestar(route_handlers=[chunk_endpoint])) as client:
-        response = client.get("/chunks")
+        result = client.get("/chunks")
 
-    assert response.status_code == 206
-    assert response.text == "春天来了"
-    assert response.headers["Content-Type"].startswith("text/plain")
-    assert response.headers["X-Content-Mode"] == "chunks"
+    assert result.status_code == 206
+    assert result.text == "春天来了"
+    assert result.headers["Content-Type"].startswith("text/plain")
+    assert result.headers["X-Content-Mode"] == "chunks"
+    assert result.cookies["spring"] == "coming"
+    assert completed == ["done"]
 
 
 def test_sse_encodes_arbitrary_models_and_heartbeats() -> None:
     """通用 SSE 应支持业务模型、自定义事件名、ID 和空事件心跳。"""
+    completed: list[str] = []
+
+    def complete() -> None:
+        completed.append("done")
 
     async def events() -> AsyncIterator[CustomResult | None]:
         yield CustomResult(code=7, message="春天来了")
@@ -85,13 +122,43 @@ def test_sse_encodes_arbitrary_models_and_heartbeats() -> None:
 
     @get("/events")
     async def event_endpoint() -> ServerSentEvent:
-        return sse(events(), event_type="greeting", event_id=lambda event: event.code)
+        return sse(
+            events(),
+            event_type="greeting",
+            event_id=lambda event: event.code,
+            status=202,
+            comment_message="connected",
+            cookies={"spring": "coming"},
+            background=BackgroundTask(complete),
+        )
 
     with TestClient(Litestar(route_handlers=[event_endpoint])) as client:
-        response = client.get("/events")
+        result = client.get("/events")
 
-    assert response.status_code == 200
-    assert "event: greeting" in response.text
-    assert "id: 7" in response.text
-    assert '"message":"春天来了"' in response.text
-    assert "keep-alive" in response.text
+    assert result.status_code == 202
+    assert result.cookies["spring"] == "coming"
+    assert ": connected" in result.text
+    assert "event: greeting" in result.text
+    assert "id: 7" in result.text
+    assert '"message":"春天来了"' in result.text
+    assert "keep-alive" in result.text
+    assert completed == ["done"]
+
+
+def test_sse_accepts_fixed_event_id_and_optional_event_metadata() -> None:
+    """固定事件 ID 应与回调形式一致，事件名和重试时间可以关闭。"""
+
+    async def events() -> AsyncIterator[CustomResult | None]:
+        yield CustomResult(code=7, message="春天来了")
+
+    @get("/fixed-events")
+    async def event_endpoint() -> ServerSentEvent:
+        return sse(events(), event_type=None, event_id="fixed", retry_duration=None)
+
+    with TestClient(Litestar(route_handlers=[event_endpoint])) as client:
+        result = client.get("/fixed-events")
+
+    assert result.status_code == 200
+    assert "id: fixed" in result.text
+    assert "event:" not in result.text
+    assert "retry:" not in result.text
