@@ -5,6 +5,7 @@
 ```powershell
 uv run python benchmarks/di_benchmark.py --calls 5000 --output .local/di-after.json
 uv run python benchmarks/scale_benchmark.py --modules 100 --requests 1000 --concurrency 100 --output .local/scale.json
+uv run python -m benchmarks.server_benchmark --requests 1000 --concurrency 100 --rounds 2 --output .local/server.json
 ```
 
 `.local/` 只保存本机结果，不进入 Git。下面是 2026-11-21 在同一台 Windows、Python 3.15.2 环境得到的一次样本，不是跨机器性能承诺。
@@ -65,6 +66,21 @@ uv run python benchmarks/scale_benchmark.py --modules 100 --requests 1000 --conc
 业务包过去会在依赖容器装配和 Controller 发现时各执行一次完整 AST 扫描。现在 `ApplicationRuntime` 持有当前应用自己的 `BusinessDiscovery`，容器与 HTTP 装配共享同一份模块列表；`import_modules()` 幂等，第二次调用直接复用已经完成的导入。
 
 这个缓存只存在于单个 Runtime，不跨应用共享，也不让不同配置或测试包互相污染。回归测试会创建真实业务 Controller、连续生成两个 ASGI 应用并发起请求，同时断言 `scan_decorated_modules()` 总共只调用一次。Windows 文件缓存与后台进程会让本地启动时间波动较大，因此这里记录结构变化，不承诺固定提速百分比。
+
+## 真实 Uvicorn 网络请求
+
+`server_benchmark.py` 为每种实现启动独立的 Uvicorn 进程，由另一个进程中的 HTTPX 客户端通过 HTTP/1.1 over TCP 发请求。两个应用具有相同的 Controller 行为、Scoped 资源、Transient 依赖、指标中间件和 CORS。每轮分别执行 1,000 个顺序请求和 1,000 个并发请求，并发上限为 100；两轮交替实现顺序，进程启动与预热不计入请求耗时。
+
+2026-11-26 在 Windows、Python 3.15.2 环境的两轮算术平均：
+
+| 实现与场景 | 吞吐 | 平均延迟 | P50 |
+| --- | ---: | ---: | ---: |
+| LilyWhite 顺序 | 657/s | 1.517 ms | 1.211 ms |
+| 原生 Litestar 顺序 | 669/s | 1.482 ms | 1.249 ms |
+| LilyWhite 并发 | 536/s | 177.986 ms | 119.469 ms |
+| 原生 Litestar 并发 | 519/s | 184.384 ms | 119.290 ms |
+
+这组真实网络结果中两种实现很接近，没有显示出稳定的 LilyWhite 额外吞吐损耗。HTTPX 客户端与回环网络会占用本机资源，因此它不是专业压测器的极限吞吐测试，也不能与下面的直接 ASGI 数字直接比较。需要测量服务器饱和点时，应在另一台机器使用 `wrk` 或 `oha` 压测。
 
 ## 请求与资源回收
 
