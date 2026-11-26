@@ -9,12 +9,13 @@ import statistics
 import sys
 import tempfile
 import tracemalloc
+from collections.abc import AsyncIterator
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
 
 from litestar import Litestar, get
-from litestar.di import NamedDependency
+from litestar.di import NamedDependency, Provide
 from litestar.middleware import DefineMiddleware
 from litestar.testing import AsyncTestClient
 
@@ -58,6 +59,32 @@ class BenchmarkService:
 @get("/benchmark")
 async def benchmark_route(benchmark_service: NamedDependency[BenchmarkService]) -> dict[str, bool]:
     """让出事件循环一次，使并发 ASGI 调用真正交错执行。"""
+    await asyncio.sleep(0)
+    return {"active": benchmark_service.resource.active > 0}
+
+
+async def _native_resource() -> AsyncIterator[RequestResource]:
+    """使用 Litestar 原生异步生成器依赖提供请求资源并自动清理。"""
+    resource = RequestResource()
+    try:
+        yield resource
+    finally:
+        await resource.close()
+
+
+def _native_option() -> TransientOption:
+    """提供与 LilyWhite 对照组相同的 Transient 对象。"""
+    return TransientOption()
+
+
+def _native_service(resource: RequestResource, option: TransientOption) -> BenchmarkService:
+    """通过原生 Litestar DI 组合相同的下游依赖。"""
+    return BenchmarkService(resource, option)
+
+
+@get("/benchmark")
+async def native_benchmark_route(benchmark_service: BenchmarkService) -> dict[str, bool]:
+    """使用原生类型注入执行与 LilyWhite 对照组相同的路由。"""
     await asyncio.sleep(0)
     return {"active": benchmark_service.resource.active > 0}
 
@@ -149,6 +176,19 @@ def _request_app() -> Litestar:
     )
 
 
+def _native_request_app() -> Litestar:
+    """创建只使用原生 Litestar DI 和资源清理能力的对照应用。"""
+    return Litestar(
+        route_handlers=[native_benchmark_route],
+        dependencies={
+            "resource": Provide(_native_resource),
+            "option": Provide(_native_option, sync_to_thread=False),
+            "benchmark_service": Provide(_native_service, sync_to_thread=False),
+        },
+        logging_config=None,
+    )
+
+
 def _latency_metrics(samples: list[float]) -> dict[str, float]:
     """计算请求延迟分布，输入单位为秒，输出单位为毫秒。"""
     ordered = sorted(samples)
@@ -160,9 +200,8 @@ def _latency_metrics(samples: list[float]) -> dict[str, float]:
     }
 
 
-async def measure_requests(requests: int, concurrency: int) -> dict[str, object]:
-    """测量顺序和并发 ASGI 请求，并检查持续运行后的内存与资源回收。"""
-    app = _request_app()
+async def _measure_request_app(app: Litestar, requests: int, concurrency: int) -> dict[str, object]:
+    """测量单个 ASGI 应用，并检查持续运行后的内存与资源回收。"""
     async with AsyncTestClient(app):
         for _ in range(20):
             await _asgi_request(app)
@@ -218,8 +257,16 @@ async def measure_requests(requests: int, concurrency: int) -> dict[str, object]
     }
 
 
+async def measure_requests(requests: int, concurrency: int) -> dict[str, object]:
+    """按相同请求、依赖和资源清理语义对比 LilyWhite 与原生 Litestar。"""
+    return {
+        "lilywhite": await _measure_request_app(_request_app(), requests, concurrency),
+        "native_litestar": await _measure_request_app(_native_request_app(), requests, concurrency),
+    }
+
+
 def run_benchmark(module_count: int, requests: int, concurrency: int) -> dict[str, object]:
-    """执行启动、请求和内存基准。"""
+    """执行启动、双实现请求和内存基准。"""
     settings = AppProperties().override(logging={"console": False}).logging
     setup_logging(settings, intercept_standard_logging=False)
     return {

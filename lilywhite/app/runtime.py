@@ -9,6 +9,7 @@ from ..observability.health import HealthCenter
 from ..observability.metrics import RequestMetrics
 from ..utils.registry import ManagedRegistrySelection
 from .DI.container import create_container
+from .DI.discovery import discover_business_modules
 from .lifespan import LifespanManager
 
 
@@ -37,12 +38,22 @@ class ApplicationRuntime:
         runtime_resources[HealthCenter] = self.health_center
         runtime_resources[RequestMetrics] = self.request_metrics
         runtime_resources[LogStream] = self.log_stream
+        self.business_discovery = (
+            discover_business_modules(
+                business_package,
+                properties=properties,
+                managed_registries=managed_registries,
+            )
+            if business_package is not None
+            else None
+        )
         self.container = create_container(
             properties=properties,
             business_package=business_package,
             resources=runtime_resources,
             managed_registries=managed_registries,
             optional_imports=optional_imports,
+            discovery=self.business_discovery,
         )
         self._active_components: dict[str, ManagedComponent] = {}
         self.lifespan = LifespanManager()

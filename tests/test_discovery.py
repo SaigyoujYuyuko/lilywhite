@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from litestar.testing import TestClient
 
+import lilywhite.app.DI.discovery as discovery_module
 from lilywhite import LilyWhiteApplication
 from lilywhite.app.DI.ast_scan import scan_decorated_classes
 from lilywhite.app.DI.discovery import scan_decorated_modules
@@ -195,3 +196,47 @@ def test_nonstandard_layer_names_complete_real_http_and_di(
     assert response.status_code == 200
     assert response.json() == {"message": "春が来た，Lily"}
     assert f"{package}.store.mysql" in sys.modules
+
+
+def test_application_reuses_one_business_scan_for_di_and_http(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """容器与多次 HTTP 装配应共享当前 Runtime 的同一份业务发现结果。"""
+    package = "single_scan_application"
+    _write_package(
+        tmp_path,
+        package,
+        {
+            "__init__.py": '"""单次扫描应用。"""\n',
+            "routes.py": (
+                "from litestar import Controller, get\n"
+                "from lilywhite import controller\n"
+                '@controller("/once")\n'
+                "class OnceController(Controller):\n"
+                '    @get("/greeting")\n'
+                "    async def greeting(self) -> dict[str, str]:\n"
+                '        return {"message": "春が来た"}\n'
+            ),
+        },
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    scan_calls = 0
+    original_scan = discovery_module.scan_decorated_modules
+
+    def counted_scan(package_name: str, **kwargs: object) -> tuple[str, ...]:
+        nonlocal scan_calls
+        scan_calls += 1
+        return original_scan(package_name, **kwargs)
+
+    monkeypatch.setattr(discovery_module, "scan_decorated_modules", counted_scan)
+    framework = LilyWhiteApplication(AppProperties(), business_package=package)
+    application = framework.create_app()
+    framework.create_app()
+
+    with TestClient(application) as client:
+        response = client.get("/once/greeting")
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "春が来た"}
+    assert scan_calls == 1

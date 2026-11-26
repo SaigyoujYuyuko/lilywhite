@@ -2,6 +2,7 @@
 
 import ast
 from collections import defaultdict
+from dataclasses import dataclass
 from importlib import import_module
 from pkgutil import walk_packages
 from types import ModuleType
@@ -141,20 +142,63 @@ def scan_decorated_modules(
     return modules
 
 
+@dataclass
+class BusinessDiscovery:
+    """保存单个应用的业务模块选择结果，并保证精确导入只执行一次。"""
+
+    package_name: str
+    module_names: tuple[str, ...]
+    _imported: bool = False
+
+    def import_modules(self, optional_imports: tuple[str, ...] = ()) -> None:
+        """首次调用执行精确导入，后续容器和 HTTP 装配直接复用结果。"""
+        if self._imported:
+            return
+        import_decorated_modules(
+            self.package_name,
+            module_names=self.module_names,
+            optional_imports=optional_imports,
+        )
+        self._imported = True
+
+
+def discover_business_modules(
+    package_name: str,
+    *,
+    properties: AppProperties | None = None,
+    managed_registries: ManagedRegistrySelection = (),
+) -> BusinessDiscovery:
+    """只扫描一次业务包，把结果保存在当前应用的发现对象中。"""
+    return BusinessDiscovery(
+        package_name,
+        scan_decorated_modules(
+            package_name,
+            properties=properties,
+            managed_registries=managed_registries,
+        ),
+    )
+
+
 def import_decorated_modules(
     package_name: str,
     *,
     properties: AppProperties | None = None,
     managed_registries: ManagedRegistrySelection = (),
     optional_imports: tuple[str, ...] = (),
+    module_names: tuple[str, ...] | None = None,
 ) -> list[ModuleType]:
     """导入选中模块；仅未启用前缀允许跳过缺失依赖。"""
+    selected = (
+        scan_decorated_modules(
+            package_name,
+            properties=properties,
+            managed_registries=managed_registries,
+        )
+        if module_names is None
+        else module_names
+    )
     imported: list[ModuleType] = []
-    for module_name in scan_decorated_modules(
-        package_name,
-        properties=properties,
-        managed_registries=managed_registries,
-    ):
+    for module_name in selected:
         log.trace("module import module={}", module_name)
         try:
             imported.append(import_module(module_name))
@@ -226,14 +270,18 @@ def discover_business_controllers(
     properties: AppProperties | None = None,
     managed_registries: ManagedRegistrySelection = (),
     optional_imports: tuple[str, ...] = (),
+    discovery: BusinessDiscovery | None = None,
 ) -> list[type[Controller]]:
-    """按同一份配置与托管注册表发现业务 Controller。"""
-    import_decorated_modules(
-        package_name,
-        properties=properties,
-        managed_registries=managed_registries,
-        optional_imports=optional_imports,
-    )
+    """复用当前应用的业务发现结果，再按稳定顺序收集 Controller。"""
+    if discovery is None:
+        discovery = discover_business_modules(
+            package_name,
+            properties=properties,
+            managed_registries=managed_registries,
+        )
+    elif discovery.package_name != package_name:
+        raise ValueError("业务发现结果与 Controller 包不一致")
+    discovery.import_modules(optional_imports)
     return _sorted_controllers(package_name)
 
 
@@ -255,8 +303,10 @@ def discover_websocket_controllers(package_name: str) -> list[type[WebsocketList
 
 
 __all__ = [
+    "BusinessDiscovery",
     "StaticDiscoveryError",
     "discover_business_controllers",
+    "discover_business_modules",
     "discover_controllers",
     "discover_websocket_controllers",
     "import_decorated_modules",

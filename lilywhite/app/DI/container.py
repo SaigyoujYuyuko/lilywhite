@@ -27,7 +27,7 @@ from ...lifecycle import (
 from ...logger import LoggerManager
 from ...qualifier import Qualifier, qualifier_name
 from ...utils.registry import LifetimeType, ManagedRegistrySelection
-from .discovery import import_decorated_modules, import_package_modules
+from .discovery import BusinessDiscovery, discover_business_modules, import_package_modules
 
 log = LoggerManager.get_logger("DI")
 
@@ -708,6 +708,7 @@ def create_container(
     resources: Mapping[type[object], object] | None = None,
     managed_registries: ManagedRegistrySelection = (),
     optional_imports: tuple[str, ...] = (),
+    discovery: BusinessDiscovery | None = None,
 ) -> DependencyContainer:
     """自动收集框架与托管注册表装饰器，再构造依赖图。"""
     package_names = ("lilywhite",) if business_package is None else ("lilywhite", business_package)
@@ -716,12 +717,15 @@ def create_container(
     import_package_modules("lilywhite.utils")
     import_package_modules("lilywhite.observability")
     if business_package is not None:
-        import_decorated_modules(
-            business_package,
-            properties=properties,
-            managed_registries=managed_registries,
-            optional_imports=optional_imports,
-        )
+        if discovery is None:
+            discovery = discover_business_modules(
+                business_package,
+                properties=properties,
+                managed_registries=managed_registries,
+            )
+        elif discovery.package_name != business_package:
+            raise ValueError("业务发现结果与容器包不一致")
+        discovery.import_modules(optional_imports)
 
     container = DependencyContainer(package_names=package_names)
     container.register_instance(AppProperties, properties)

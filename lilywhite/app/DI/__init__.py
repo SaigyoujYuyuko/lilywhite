@@ -3,7 +3,9 @@
 from .ast_scan import ASTScanner, DecoratedClass, StaticScanError, scan_decorated_classes
 from .container import DependencyContainer, DependencyInjectionException, DependencyScope, create_container
 from .discovery import (
+    BusinessDiscovery,
     discover_business_controllers,
+    discover_business_modules,
     discover_controllers,
     discover_websocket_controllers,
     import_decorated_modules,
@@ -14,6 +16,7 @@ from .scope import RequestScopeMiddleware
 
 __all__ = [
     "ASTScanner",
+    "BusinessDiscovery",
     "DecoratedClass",
     "DependencyContainer",
     "DependencyInjectionException",
@@ -22,6 +25,7 @@ __all__ = [
     "StaticScanError",
     "create_container",
     "discover_business_controllers",
+    "discover_business_modules",
     "discover_controllers",
     "discover_websocket_controllers",
     "import_decorated_modules",

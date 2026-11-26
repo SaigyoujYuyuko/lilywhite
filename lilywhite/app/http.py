@@ -99,6 +99,7 @@ def create_http_app(
                     properties=runtime.properties,
                     managed_registries=runtime.managed_registries,
                     optional_imports=runtime.optional_imports,
+                    discovery=runtime.business_discovery,
                 ),
                 *discover_websocket_controllers(runtime.business_package),
             )
