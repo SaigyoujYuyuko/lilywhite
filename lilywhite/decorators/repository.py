@@ -2,27 +2,18 @@
 
 from collections.abc import Callable
 
-import msgspec
-
 from ..qualifier import qualifier_name
-from ..utils.registry import LifetimeType, Registry
-from .registry import module_in_packages, qualified_name
+from ..utils.registry import LifetimeType
+from .registry import (
+    DependencyKind,
+    DependencyRegistration,
+    dependency_registry,
+    register_dependency,
+    registered_dependencies,
+)
 
-repository_registry: Registry[RepositoryRegistration] = Registry()
-
-
-class RepositoryRegistration(msgspec.Struct, frozen=True):
-    """Repository 接口、实现类型、生命周期和可选限定名。"""
-
-    interface: type[object]
-    implementation: type[object]
-    lifetime: LifetimeType
-    qualifier: str | None = None
-
-    @property
-    def __name__(self) -> str:  # pyright: ignore[reportIncompatibleVariableOverride]
-        """让通用 Registry 能把这条元数据记录视为命名对象。"""
-        return self.implementation.__name__
+RepositoryRegistration = DependencyRegistration
+repository_registry = dependency_registry
 
 
 def repository[T](
@@ -35,12 +26,15 @@ def repository[T](
     qualifier = qualifier_name(name)
 
     def register(implementation: type[T]) -> type[T]:
-        """记录实现类型并保留原始类定义。"""
-        registration = RepositoryRegistration(interface, implementation, lifetime, qualifier)
-        key = (
-            f"{qualified_name(interface)}:{qualified_name(implementation)}:{lifetime.value}:{qualifier or ''}"
+        """记录统一 Repository 元数据并保留原始类定义。"""
+        registration = DependencyRegistration(
+            DependencyKind.REPOSITORY,
+            interface,
+            implementation,
+            lifetime,
+            qualifier=qualifier,
         )
-        repository_registry.register("repository", key, registration)
+        register_dependency(registration)
         return implementation
 
     return register
@@ -54,9 +48,8 @@ def registered_repositories(
     """返回指定包内 Interface 的全部候选实现及生命周期。"""
     return [
         registration
-        for registration in repository_registry.by_namespace("repository")
+        for registration in registered_dependencies(package_names, kind=DependencyKind.REPOSITORY)
         if registration.interface is interface
-        and module_in_packages(registration.implementation.__module__, package_names)
     ]
 
 

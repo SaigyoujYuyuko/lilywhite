@@ -120,10 +120,17 @@ class ASTScanner:
         decorators: dict[str, str],
         modules: dict[str, str],
     ) -> ast.expr | None:
-        """找到类上的 enabled 表达式，但不在 AST 阶段执行它。"""
+        """提取 enabled 或 component(conditional=...) 的条件表达式，不执行源码。"""
         for decorator in class_node.decorator_list:
-            if self._decorator_name(decorator, decorators, modules) == "enabled":
-                return decorator
+            name = self._decorator_name(decorator, decorators, modules)
+            if not isinstance(decorator, ast.Call):
+                continue
+            if name == "enabled" and len(decorator.args) == 1 and not decorator.keywords:
+                return decorator.args[0]
+            if name == "component":
+                for keyword in decorator.keywords:
+                    if keyword.arg == "conditional":
+                        return keyword.value
         return None
 
     def _decorator_name(

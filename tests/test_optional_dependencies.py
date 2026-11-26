@@ -6,9 +6,11 @@ from pathlib import Path
 import pytest
 from litestar.testing import TestClient
 
-from lilywhite import AppProperties, LilyWhiteApplication, enabled, service
+from lilywhite import AppProperties, LilyWhiteApplication, component, enabled, service
+from lilywhite.app.DI.container import DependencyContainer, DependencyInjectionException
 from lilywhite.app.runtime import ApplicationRuntime
 from lilywhite.config import section
+from lilywhite.decorators.component import registered_components
 from lilywhite.decorators.conditional import condition_enabled
 
 
@@ -145,4 +147,77 @@ def test_membership_lambda_skips_missing_disabled_driver(
 
     ApplicationRuntime(BackendProperties(), business_package=package)
 
+    assert f"{package}.postgres" not in sys.modules
+
+
+def test_component_direct_condition_disables_registration() -> None:
+    """conditional 谓词应与 enabled 一样阻止组件进入依赖容器。"""
+
+    @component(conditional=lambda _properties: False)
+    class DirectlyDisabled:
+        pass
+
+    registration = next(
+        item for item in registered_components((__name__,)) if item.implementation is DirectlyDisabled
+    )
+    container = DependencyContainer()
+    container.register_dependency(registration)
+    container.build()
+
+    with pytest.raises(DependencyInjectionException, match="依赖未注册"):
+        container.resolve(DirectlyDisabled)
+
+
+def test_component_rejects_direct_and_decorator_conditions_together() -> None:
+    """同一组件重复声明两种条件时应在装配阶段明确失败。"""
+
+    @enabled("integrations.mysql")
+    @component(conditional="integrations.mysql")
+    class DuplicateConditions:
+        pass
+
+    registration = next(
+        item for item in registered_components((__name__,)) if item.implementation is DuplicateConditions
+    )
+    container = DependencyContainer()
+
+    with pytest.raises(ValueError, match="同时声明"):
+        container.register_dependency(registration)
+
+
+def test_component_direct_conditions_skip_missing_disabled_drivers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """conditional 的路径和成员谓词都应在导入前排除禁用模块。"""
+
+    class ComponentProperties(AppProperties):
+        integrations = section(mysql=False)
+        storage = section(enabled_backends=("memory",))
+
+    package = "component_conditional_optional_app"
+    root = tmp_path / package
+    root.mkdir()
+    (root / "__init__.py").write_text('"""Component 直接条件示例。"""\n', encoding="utf-8")
+    (root / "mysql.py").write_text(
+        "import missing_lilywhite_mysql_driver\n"
+        "from lilywhite import component\n"
+        '@component(conditional="integrations.mysql")\n'
+        "class MySQLComponent:\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    (root / "postgres.py").write_text(
+        "import missing_lilywhite_postgres_driver\n"
+        "import lilywhite as lw\n"
+        "@lw.component(conditional=lambda properties: 'postgres' in properties.storage.enabled_backends)\n"
+        "class PostgresComponent:\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    ApplicationRuntime(ComponentProperties(), business_package=package)
+
+    assert f"{package}.mysql" not in sys.modules
     assert f"{package}.postgres" not in sys.modules

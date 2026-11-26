@@ -11,13 +11,12 @@ from litestar.datastructures import State
 from litestar.di import Provide
 
 from ...config import AppProperties
-from ...decorators import component as component_registrations
 from ...decorators import exception_handler as exception_handler_registrations
 from ...decorators import repository as repository_registrations
-from ...decorators import service as service_registrations
 from ...decorators.conditional import condition_enabled
 from ...decorators.configuration import _impl as configuration_registrations
 from ...decorators.configuration._impl import BeanFactory
+from ...decorators.registry import DependencyKind, DependencyRegistration, registered_dependencies
 from ...lifecycle import (
     AdaptedResource,
     ManagedComponent,
@@ -202,6 +201,26 @@ class DependencyContainer:
         self._instances[key] = instance
         self._lifetimes[key] = LifetimeType.SINGLETON
         self._implementations[key] = target
+
+    def register_dependency(self, registration: DependencyRegistration) -> None:
+        """按统一元数据装配 Component 或 Service，并计算其直接或装饰器条件。"""
+        if registration.kind is DependencyKind.REPOSITORY:
+            raise ValueError("Repository 元数据由接口候选解析流程装配")
+        if not condition_enabled(
+            registration.implementation,
+            self._properties,
+            direct=registration.conditional,
+        ):
+            return
+        if registration.kind is DependencyKind.SERVICE:
+            self.register_service(registration.implementation, registration.lifetime)
+            return
+        self.register_component(
+            registration.interface,
+            registration.implementation,
+            registration.lifetime,
+            name=registration.qualifier,
+        )
 
     def register_service(
         self,
@@ -706,15 +725,10 @@ def create_container(
 
     container = DependencyContainer(package_names=package_names)
     container.register_instance(AppProperties, properties)
-    registrations = tuple(component_registrations.registered_components(package_names))
+    registrations = tuple(registered_dependencies(package_names))
     for registration in registrations:
-        if not registration.fallback:
-            container.register_component(
-                registration.interface,
-                registration.implementation,
-                registration.lifetime,
-                name=registration.qualifier,
-            )
+        if registration.kind is not DependencyKind.REPOSITORY and not registration.fallback:
+            container.register_dependency(registration)
     for configuration_type in configuration_registrations.registered_configurations(package_names):
         if not condition_enabled(configuration_type, properties):
             continue
@@ -733,7 +747,7 @@ def create_container(
                 close=bean_registration.closer,
             )
     for registration in registrations:
-        if not registration.fallback:
+        if registration.kind is not DependencyKind.COMPONENT or not registration.fallback:
             continue
         key = _dependency_key(registration.interface, registration.qualifier)
         if key in container._lifetimes:
@@ -743,17 +757,10 @@ def create_container(
                 _type_name(registration.implementation),
             )
             continue
-        container.register_component(
-            registration.interface,
-            registration.implementation,
-            registration.lifetime,
-            name=registration.qualifier,
-        )
+        container.register_dependency(registration)
     for target, instance in (resources or {}).items():
         container.register_instance(target, instance)
     for handler_type in exception_handler_registrations.registered_exception_handler_types(package_names):
         container.register_component(handler_type, handler_type, LifetimeType.SINGLETON)
-    for service_registration in service_registrations.registered_services(package_names):
-        container.register_service(service_registration.service_type, service_registration.lifetime)
     container.build()
     return container

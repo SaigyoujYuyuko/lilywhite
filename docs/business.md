@@ -13,7 +13,7 @@ from lilywhite.decorators.controller import controller
 from lilywhite.decorators.service import service
 ```
 
-这些类装饰器共享 `DecoratorRegistry`，它继承通用 `Registry`，负责全限定名注册和业务包过滤；日常业务代码继续使用顶层导入即可。
+`@component`、`@service` 和 `@repository` 共享 `DependencyRegistration` 与同一个依赖注册表，统一记录公开类型、实现类型、生命周期和限定名。三种装饰器保留各自的分层语义：Service 额外桥接 Controller，Repository 提供接口候选，Component 支持后备实现。Controller 等独立 HTTP 注册表继续使用 `DecoratorRegistry`；日常业务代码从顶层导入即可。
 
 LilyWhite 保留分层和构造器注入，但不生成代理类。Controller 调 Service，Service 依赖 Repository Interface，具体 Adapter 由配置条件在装配时决定。
 
@@ -331,6 +331,8 @@ class RedisCacheComponent:
 Component 可以注入 Service 或其他组件；需要暴露给 HTTP 参数注入的业务用例则应使用 `@service`。
 
 框架或扩展可以用 `@component(interface=SomeInterface, fallback=True)` 声明后备实现。普通组件和 Bean 先绑定，后备实现只在该接口仍没有绑定时补位；业务提供替换实现时不需要加 `fallback=True`。
+
+需要按配置启停时，可以直接写 `@component(conditional="features.cache")` 或 `@component(conditional=lambda config: config.features.cache)`，语义与 `@enabled` 相同，详见[条件装配](configuration.md#条件装配)。
 
 ## 文件组件
 

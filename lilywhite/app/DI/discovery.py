@@ -40,12 +40,9 @@ _CONDITIONAL_DECORATORS = frozenset({"service", "repository", "component", "conf
 def _static_condition_path(item: DecoratedClass) -> str | None:
     """提取字面量配置路径；其他动态条件仍需真实导入后计算。"""
     condition = item.condition
-    if condition is None or not isinstance(condition, ast.Call) or condition.keywords:
+    if not isinstance(condition, ast.Constant):
         return None
-    if len(condition.args) != 1 or not isinstance(condition.args[0], ast.Constant):
-        return None
-    path = condition.args[0].value
-    return path if isinstance(path, str) else None
+    return condition.value if isinstance(condition.value, str) else None
 
 
 def _attribute_path(expression: ast.expr, root: str) -> str | None:
@@ -62,12 +59,9 @@ def _attribute_path(expression: ast.expr, root: str) -> str | None:
 
 def _static_membership_condition(item: DecoratedClass, properties: AppProperties) -> bool | None:
     """安全计算常量 in/not in 配置集合的简单 lambda，不执行任意表达式。"""
-    condition = item.condition
-    if condition is None or not isinstance(condition, ast.Call) or condition.keywords:
+    function = item.condition
+    if not isinstance(function, ast.Lambda):
         return None
-    if len(condition.args) != 1 or not isinstance(condition.args[0], ast.Lambda):
-        return None
-    function = condition.args[0]
     if len(function.args.args) != 1 or not isinstance(function.body, ast.Compare):
         return None
     comparison = function.body

@@ -246,6 +246,20 @@ class AIConfiguration:
 @enabled(lambda config: config.features.ai and config.server.host == "127.0.0.1")
 ```
 
+Component 也可以把同一个条件直接写进 `conditional` 参数，不需要再叠一层装饰器：
+
+```python
+@component(conditional="features.cache")
+class CacheComponent:
+    pass
+
+@component(conditional=lambda config: config.features.ai)
+class AIComponent:
+    pass
+```
+
+`conditional` 与 `@enabled` 使用同一套路径和谓词语义，同一组件不能同时声明两种条件。
+
 复杂条件也可以写成带业务配置类型的普通函数：
 
 ```python

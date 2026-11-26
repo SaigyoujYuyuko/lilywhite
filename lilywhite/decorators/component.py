@@ -3,41 +3,19 @@
 from collections.abc import Callable, Iterator
 from typing import overload
 
-import msgspec
-
 from ..qualifier import qualifier_name
-from ..utils.registry import LifetimeType, Registry
-from .registry import module_in_packages
+from ..utils.registry import LifetimeType
+from .conditional import Condition, normalize_condition
+from .registry import (
+    DependencyKind,
+    DependencyRegistration,
+    dependency_registry,
+    register_dependency,
+    registered_dependencies,
+)
 
-component_registry: Registry[ComponentRegistration] = Registry()
-
-
-class ComponentRegistration(msgspec.Struct, frozen=True):
-    """组件公开类型、实现类型、生命周期、后备标记和可选限定名。"""
-
-    interface: type[object]
-    implementation: type[object]
-    lifetime: LifetimeType
-    fallback: bool = False
-    qualifier: str | None = None
-
-    @property
-    def __name__(self) -> str:  # pyright: ignore[reportIncompatibleVariableOverride]
-        """让通用 Registry 能把这条元数据记录视为命名对象。"""
-        return self.implementation.__name__
-
-
-def _namespace(
-    interface: type[object],
-    implementation: type[object],
-    lifetime: LifetimeType,
-    qualifier: str | None,
-) -> str:
-    """按接口、实现、生命周期和限定名隔离组件注册。"""
-    return (
-        f"{interface.__module__}.{interface.__qualname__}:"
-        f"{implementation.__module__}.{implementation.__qualname__}:{lifetime.value}:{qualifier or ''}"
-    )
+ComponentRegistration = DependencyRegistration
+component_registry = dependency_registry
 
 
 @overload
@@ -48,6 +26,7 @@ def component[T](
     lifetime: LifetimeType = LifetimeType.SINGLETON,
     fallback: bool = False,
     name: str | None = None,
+    conditional: Condition | str | None = None,
 ) -> type[T]: ...
 
 
@@ -59,6 +38,7 @@ def component[T](
     lifetime: LifetimeType = LifetimeType.SINGLETON,
     fallback: bool = False,
     name: str | None = None,
+    conditional: Condition | str | None = None,
 ) -> Callable[[type[T]], type[T]]: ...
 
 
@@ -69,17 +49,25 @@ def component[T](
     lifetime: LifetimeType = LifetimeType.SINGLETON,
     fallback: bool = False,
     name: str | None = None,
+    conditional: Condition | str | None = None,
 ) -> type[T] | Callable[[type[T]], type[T]]:
-    """注册基础设施组件；fallback 实现只在同接口同限定名没有其他绑定时补位。"""
+    """注册基础设施组件，支持后备实现以及直接声明的配置路径或谓词条件。"""
     qualifier = qualifier_name(name)
+    condition = normalize_condition(conditional) if conditional is not None else None
 
     def register(implementation: type[T]) -> type[T]:
-        """记录组件类型而不创建实例。"""
+        """记录统一组件元数据而不创建实例。"""
         public_type = interface or implementation
-        registration = ComponentRegistration(public_type, implementation, lifetime, fallback, qualifier)
-        component_registry.register(
-            "component", _namespace(public_type, implementation, lifetime, qualifier), registration
+        registration = DependencyRegistration(
+            DependencyKind.COMPONENT,
+            public_type,
+            implementation,
+            lifetime,
+            fallback,
+            qualifier,
+            condition,
         )
+        register_dependency(registration)
         return implementation
 
     return register if target is None else register(target)
@@ -87,9 +75,7 @@ def component[T](
 
 def registered_components(package_names: tuple[str, ...] | None = None) -> Iterator[ComponentRegistration]:
     """迭代指定包内的组件及其公开 Interface。"""
-    for registration in component_registry.by_namespace("component"):
-        if module_in_packages(registration.implementation.__module__, package_names):
-            yield registration
+    yield from registered_dependencies(package_names, kind=DependencyKind.COMPONENT)
 
 
 __all__ = ["ComponentRegistration", "component", "component_registry", "registered_components"]
