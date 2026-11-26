@@ -6,6 +6,7 @@
 uv run python benchmarks/di_benchmark.py --calls 5000 --output .local/di-after.json
 uv run python benchmarks/scale_benchmark.py --modules 100 --requests 1000 --concurrency 100 --output .local/scale.json
 uv run python -m benchmarks.server_benchmark --requests 1000 --concurrency 100 --rounds 2 --output .local/server.json
+uv run python -m benchmarks.file_benchmark --sizes 65536,1048576,8388608 --requests 100 --concurrency 20 --rounds 2 --output .local/file.json
 ```
 
 `.local/` 只保存本机结果，不进入 Git。下面是 2026-11-21 在同一台 Windows、Python 3.15.2 环境得到的一次样本，不是跨机器性能承诺。
@@ -81,6 +82,23 @@ uv run python -m benchmarks.server_benchmark --requests 1000 --concurrency 100 -
 | 原生 Litestar 并发 | 519/s | 184.384 ms | 119.290 ms |
 
 这组真实网络结果中两种实现很接近，没有显示出稳定的 LilyWhite 额外吞吐损耗。HTTPX 客户端与回环网络会占用本机资源，因此它不是专业压测器的极限吞吐测试，也不能与下面的直接 ASGI 数字直接比较。需要测量服务器饱和点时，应在另一台机器使用 `wrk` 或 `oha` 压测。
+
+## 文件下载与 AyaFileIO
+
+`file_benchmark.py` 对比 LilyWhite `FileIO` 的 AyaFileIO 实现与 Litestar 原生 `File`。两边读取同一个随机文件，使用相同 64 KiB 分块、Content-Length 和 Uvicorn 配置；客户端流式消费并校验完整字节数，不把整个文件保存在内存。每种尺寸执行两轮，每轮包含 100 个顺序请求和 100 个并发请求，并发上限为 20。
+
+2026-11-26 在 Windows、Python 3.15.2 环境的两轮平均载荷吞吐：
+
+| 文件与场景 | AyaFileIO | Litestar File |
+| --- | ---: | ---: |
+| 64 KiB 顺序 | 32.11 MiB/s | 29.40 MiB/s |
+| 64 KiB 并发 | 21.66 MiB/s | 28.51 MiB/s |
+| 1 MiB 顺序 | 208.01 MiB/s | 155.84 MiB/s |
+| 1 MiB 并发 | 255.41 MiB/s | 227.11 MiB/s |
+| 8 MiB 顺序 | 303.13 MiB/s | 208.13 MiB/s |
+| 8 MiB 并发 | 420.83 MiB/s | 318.50 MiB/s |
+
+这组样本里，AyaFileIO 在 1 MiB 和 8 MiB 的顺序、并发场景均领先；8 MiB 分别约为 1.46 倍和 1.32 倍。64 KiB 并发结果受单次运行波动影响较大，不作为稳定领先或落后结论。吞吐包含完整 HTTP 链路，不是纯磁盘读取速度；不同磁盘、操作系统和分块大小仍需重新测量。
 
 ## 请求与资源回收
 
