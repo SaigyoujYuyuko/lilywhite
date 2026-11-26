@@ -2,12 +2,12 @@
 
 > 春が来た。
 >
-> 基于 Litestar + Uvicorn 的 Python 服务端框架。
-> 你理解为 **Python 版 Spring** 就行！
+> 基于 Litestar 和 Uvicorn 的 Python Web 框架。
+> 想要 Spring 的分层和依赖注入，又不想在 Python 里写一堆 Builder，可以试试。
 
-装饰器一贴，构造器一写，剩下的交给容器。分层、DI、生命周期、多存储后端，都已经替你备好了。
+`@controller`、`@service`、`@repository` 和 `@component` 用来声明组件。构造器写清依赖，容器负责创建和清理。存储实现可以通过配置切换，启动时也不用再手动 import 一堆模块。
 
-没有代理、AOP 和字节码魔法。Lily White 是报春妖精，这个框架也把 Spring 的开发体验带进 Python，再涂上一点幻想乡的颜色。
+名字和 `春が来た。` 都来自东方 Project 的报春妖精 Lily White。框架不生成代理，也不靠 AOP 隐藏调用过程。函数在哪里调用、对象在哪里创建，都能顺着代码找到。
 
 ## 快速开始
 
@@ -21,6 +21,7 @@ uv add lilywhite
 # my_app/application.py
 from lilywhite import LilywhiteMain
 
+
 @LilywhiteMain
 class MyApplication:
     application_name = "My LilyWhite App"
@@ -30,7 +31,9 @@ class MyApplication:
 ```python
 # my_app/__main__.py
 from lilywhite import run
+
 from .application import MyApplication
+
 
 if __name__ == "__main__":
     run(MyApplication)
@@ -45,7 +48,13 @@ version: 1
 uv run python -m my_app
 ```
 
-打开 `http://127.0.0.1:8000/healthz`，应用已经跑起来了。
+打开 `http://127.0.0.1:8000/healthz`，就能看到健康检查结果。
+
+仓库里的 `example/` 是能直接运行的问候应用：
+
+```bash
+uv run python -m example
+```
 
 ## 文档
 
@@ -58,6 +67,5 @@ uv run python -m my_app
 - [声明式响应后台任务](docs/background.md)
 - [YAML 与声明式配置](docs/configuration.md)
 - [健康检查、指标、日志流与响应格式](docs/operations.md)
+- [性能基准与文件场景](docs/performance.md)
 - [文档导航与仓库结构](docs/index.md)
-
-仓库里的 `example/` 是可以直接运行的完整问候应用，可以试着运行
