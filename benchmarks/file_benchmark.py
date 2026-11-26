@@ -16,7 +16,7 @@ from time import perf_counter
 import httpx
 import uvicorn
 
-from .file_apps import create_aya_file_app, create_litestar_file_app
+from .file_apps import create_aya_aopen_file_app, create_aya_file_app, create_litestar_file_app
 
 
 def _free_port() -> int:
@@ -28,7 +28,11 @@ def _free_port() -> int:
 
 def _serve(implementation: str, path: str, chunk_size: int, port: int) -> None:
     """在独立进程中启动相同 Uvicorn 配置的文件下载服务。"""
-    factories = {"ayafileio": create_aya_file_app, "litestar_file": create_litestar_file_app}
+    factories = {
+        "ayafileio": create_aya_file_app,
+        "ayafileio_aopen": create_aya_aopen_file_app,
+        "litestar_file": create_litestar_file_app,
+    }
     app = factories[implementation](path, chunk_size)
     config = uvicorn.Config(
         app,
@@ -159,14 +163,18 @@ async def run_benchmark(
     rounds: int,
     chunk_size: int,
 ) -> dict[str, object]:
-    """逐文件尺寸交替两种实现，输出全部独立运行结果。"""
+    """逐文件尺寸交替三种实现，输出全部独立运行结果。"""
     scenarios: list[dict[str, object]] = []
-    implementations = ("ayafileio", "litestar_file")
+    implementations = ("ayafileio", "ayafileio_aopen", "litestar_file")
     for file_size in sizes:
         with tempfile.TemporaryDirectory(prefix="lilywhite-file-") as directory:
             path = Path(directory) / "payload.bin"
             path.write_bytes(os.urandom(file_size))
-            runs: dict[str, list[dict[str, object]]] = {"ayafileio": [], "litestar_file": []}
+            runs: dict[str, list[dict[str, object]]] = {
+                "ayafileio": [],
+                "ayafileio_aopen": [],
+                "litestar_file": [],
+            }
             for round_index in range(rounds):
                 order = implementations if round_index % 2 == 0 else tuple(reversed(implementations))
                 for implementation in order:

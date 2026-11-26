@@ -7,6 +7,7 @@ uv run python benchmarks/di_benchmark.py --calls 5000 --output .local/di-after.j
 uv run python benchmarks/scale_benchmark.py --modules 100 --requests 1000 --concurrency 100 --output .local/scale.json
 uv run python -m benchmarks.server_benchmark --requests 1000 --concurrency 100 --rounds 2 --output .local/server.json
 uv run python -m benchmarks.file_benchmark --sizes 65536,1048576,8388608 --requests 100 --concurrency 20 --rounds 2 --output .local/file.json
+uv run python -m benchmarks.batch_benchmark --files 128 --file-size 16384 --requests 100 --concurrency 20 --rounds 2 --output .local/batch.json
 ```
 
 `.local/` 只保存本机结果，不进入 Git。下面是 2026-11-21 在同一台 Windows、Python 3.15.2 环境得到的一次样本，不是跨机器性能承诺。
@@ -99,6 +100,31 @@ uv run python -m benchmarks.file_benchmark --sizes 65536,1048576,8388608 --reque
 | 8 MiB 并发 | 420.83 MiB/s | 318.50 MiB/s |
 
 这组样本里，AyaFileIO 在 1 MiB 和 8 MiB 的顺序、并发场景均领先；8 MiB 分别约为 1.46 倍和 1.32 倍。64 KiB 并发结果受单次运行波动影响较大，不作为稳定领先或落后结论。吞吐包含完整 HTTP 链路，不是纯磁盘读取速度；不同磁盘、操作系统和分块大小仍需重新测量。
+
+### `aopen()` 是否更快
+
+同一文件基准还直接比较了普通 `open()` 与 `aopen()`，两者使用完全相同的 `read_at` 分块逻辑。另一组两轮平均结果：
+
+| 文件与场景 | 普通 `open()` | `aopen()` |
+| --- | ---: | ---: |
+| 1 MiB 顺序 | 244.52 MiB/s | 211.88 MiB/s |
+| 1 MiB 并发 | 235.50 MiB/s | 258.68 MiB/s |
+| 8 MiB 顺序 | 308.44 MiB/s | 301.78 MiB/s |
+| 8 MiB 并发 | 437.26 MiB/s | 442.95 MiB/s |
+
+本地温缓存单文件没有稳定的 `aopen()` 优势；8 MiB 并发的细小差异不足以跑赢噪声。它的合适场景是慢存储或同时打开大量文件，不应把 LilyWhite 默认 `FileIO.stream()` 改成始终使用 `aopen()`。
+
+### 批量文件读取
+
+`batch_benchmark.py` 让每次 HTTP 请求完整读取一组文件，并返回文件数与总字节数进行校验。这里的 MiB/s 计算的是实际读取的文件字节数，不是较小的 JSON 响应体。对照包括 `read_bytes_many`、`gather + open`、`gather + aopen` 和串行 `open`。
+
+| 每请求文件布局与场景 | `read_bytes_many` | 并发 `open` | 并发 `aopen` | 串行 `open` |
+| --- | ---: | ---: | ---: | ---: |
+| 32 × 64 KiB，顺序 | 464.64 MiB/s | 482.45 MiB/s | 342.13 MiB/s | 207.68 MiB/s |
+| 128 × 16 KiB，顺序 | 270.08 MiB/s | 258.52 MiB/s | 140.25 MiB/s | 66.65 MiB/s |
+| 128 × 16 KiB，并发 | 263.78 MiB/s | 250.15 MiB/s | 159.47 MiB/s | 219.16 MiB/s |
+
+128 个小文件的顺序批量读取中，`read_bytes_many` 约为串行的 4.05 倍，也略高于手写并发 `open`。32 个文件时手写并发略快，说明原生批量 API 不是所有布局下都必然最高吞吐，但它用一次调用提供有序结果和并发上限，避免了手写任务管理。外层 HTTP 并发会让多个串行请求彼此重叠，因此不能用并发组证明单个请求内部的串行读取同样优秀。
 
 ## 请求与资源回收
 
